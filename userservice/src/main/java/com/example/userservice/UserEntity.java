@@ -1,11 +1,15 @@
 package com.example.userservice;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.util.Currency;
 
+@Setter
+@Getter
 @Table(name="users")
 @Entity
 public class UserEntity {
@@ -34,46 +38,6 @@ public class UserEntity {
         this.name = name;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public ZoneId getTimezone() {
-        return timezone;
-    }
-
-    public Currency getCurrency() {
-        return currency;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public void setTimezone(ZoneId timezone) {
-        this.timezone = timezone;
-    }
-
-    public void setCurrency(Currency currency) {
-        this.currency = currency;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getName() {
-        return name;
-    }
-    
     public UserEntity() {}
 
 }
