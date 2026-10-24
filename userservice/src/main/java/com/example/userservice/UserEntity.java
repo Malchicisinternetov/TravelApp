@@ -1,6 +1,7 @@
 package com.example.userservice;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -28,6 +29,7 @@ public class UserEntity {
     private BigDecimal amount;
 
     @Column(name="name")
+    @Size(max = 255)
     private String name;
     
     public UserEntity(Long id, ZoneId timezone, Currency currency, BigDecimal amount, String name) {
