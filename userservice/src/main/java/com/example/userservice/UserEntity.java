@@ -1,6 +1,7 @@
 package com.example.userservice;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -31,6 +32,15 @@ public class UserEntity {
     @Column(name="name")
     @Size(max = 255)
     private String name;
+
+    // Nullable for existing profiles created before registration was introduced.
+    @JsonIgnore
+    @Column(name = "username", unique = true, length = 50)
+    private String username;
+
+    @JsonIgnore
+    @Column(name = "password_hash", length = 60)
+    private String passwordHash;
     
     public UserEntity(Long id, ZoneId timezone, Currency currency, BigDecimal amount, String name) {
         this.id = id;

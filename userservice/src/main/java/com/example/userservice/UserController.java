@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.security.Principal;
 
 @RestController
 @RequestMapping("/users")
@@ -74,8 +75,12 @@ public class UserController {
     }
 
     @GetMapping("/by-telegram/{telegramId}")
-    public ResponseEntity<UserEntity> getUserByTelegramId(@PathVariable Long telegramId) {
+    public ResponseEntity<UserEntity> getUserByTelegramId(@PathVariable Long telegramId, Principal principal) {
         log.info("getUserByTelegramId, telegramId: {}", telegramId);
-        return ResponseEntity.ok(userService.getUserByTelegramId(telegramId));
+        UserEntity user = userService.getUserByTelegramId(telegramId);
+        if (!user.getId().toString().equals(principal.getName())) {
+            throw new AuthException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+        return ResponseEntity.ok(user);
     }
 }

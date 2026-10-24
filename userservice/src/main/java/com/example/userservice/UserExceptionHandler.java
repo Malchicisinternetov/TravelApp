@@ -15,6 +15,23 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class UserExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(UserExceptionHandler.class);
+
+    @ExceptionHandler(AuthException.class)
+    public ResponseEntity<ErrorResponse> handleAuth(AuthException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .body(new ErrorResponse(ex.getMessage(), ex.getStatus().value()));
+    }
+
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(Exception ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("Data conflicts with an existing record", 409));
+    }
+
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(Exception ex) {
+        return ResponseEntity.badRequest().body(new ErrorResponse("Invalid request body", 400));
+    }
     
     @ExceptionHandler
     public ResponseEntity<ErrorResponse> handleNotFound(UserNotFoundException ex) {

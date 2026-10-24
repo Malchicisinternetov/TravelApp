@@ -29,7 +29,8 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(UserController.class)
+@WebMvcTest(value = UserController.class,
+        properties = "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long")
 @AutoConfigureMockMvc(addFilters = false)
 @Import(UserControllerTest.JacksonConfig.class)
 class UserControllerTest {
@@ -199,7 +200,7 @@ class UserControllerTest {
     void getUserByTelegramId_ShouldReturnUser() throws Exception {
         when(userService.getUserByTelegramId(123L)).thenReturn(user);
 
-        mockMvc.perform(get("/users/by-telegram/123"))
+        mockMvc.perform(get("/users/by-telegram/123").principal(() -> "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.name").value("John"));

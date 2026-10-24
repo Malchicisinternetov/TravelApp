@@ -20,6 +20,7 @@ public class UserService {
         );
     }
     
+    @Transactional
     public UserEntity createUser(UserEntity user) {
         var settingsEntity = new UserSettingsEntity(
                 null, 
@@ -67,9 +68,11 @@ public class UserService {
                 .orElseThrow(
                         ()->new UserNotFoundException(id)
                 );
-        var updatedEntity = new UserEntity(userEntity.getId(), user.getTimezone(), user.getCurrency(), user.getAmount(), user.getName());
-
-        return userRepository.save(updatedEntity);
+        userEntity.setTimezone(user.getTimezone());
+        userEntity.setCurrency(user.getCurrency());
+        userEntity.setAmount(user.getAmount());
+        userEntity.setName(user.getName());
+        return userRepository.save(userEntity);
     }
 
     @Transactional
