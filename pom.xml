@@ -17,6 +17,7 @@
     <modules>
         <module>userservice</module>
         <module>tripservice</module>
+        <module>expensesservice</module>
         <module>notificationservice</module>
         <module>sharedlib</module>
     </modules>
