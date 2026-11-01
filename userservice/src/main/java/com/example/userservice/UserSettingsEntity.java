@@ -23,8 +23,21 @@ public class UserSettingsEntity {
     @Column(name = "telegram_id", unique = true) // Индекс для быстрого поиска
     private Long telegramId;
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean telegramVerified;
+
     private String theme;
     private String language;
     private String notificationMethod;
+
+    public UserSettingsEntity(Long id, UserEntity user, Long telegramId, String theme,
+                              String language, String notificationMethod) {
+        this.id = id;
+        this.user = user;
+        this.telegramId = telegramId;
+        this.theme = theme;
+        this.language = language;
+        this.notificationMethod = notificationMethod;
+    }
     
 }

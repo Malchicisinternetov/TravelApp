@@ -19,6 +19,8 @@ public class TripEntity {
     private String name;
     @Column(length = 4000)
     private String description;
+    @Column(length = 255)
+    private String destinationPoint;
     @ElementCollection
     @CollectionTable(name = "trip_participants", joinColumns = @JoinColumn(name = "trip_id"),
             uniqueConstraints = @UniqueConstraint(columnNames = {"trip_id", "user_id"}))

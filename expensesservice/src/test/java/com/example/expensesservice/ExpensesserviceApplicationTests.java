@@ -13,6 +13,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import tools.jackson.databind.ObjectMapper;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
+import java.time.Clock;
+import java.time.ZoneId;
 import javax.crypto.SecretKey;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -31,7 +37,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long"
 })
 @AutoConfigureMockMvc
+@Import(ExpensesserviceApplicationTests.FixedTime.class)
 class ExpensesserviceApplicationTests {
+    @TestConfiguration
+    static class FixedTime {
+        @Bean
+        @Primary
+        Clock fixedExpenseClock() {
+            return Clock.fixed(Instant.parse("2026-11-01T21:30:00Z"), ZoneId.of("Europe/Moscow"));
+        }
+    }
     private static final String BASE = "/trips/10/expenses";
     private static final List<TripClient.Participant> PARTICIPANTS = List.of(
             new TripClient.Participant(1L, "OWNER"), new TripClient.Participant(2L, "MEMBER"),
@@ -46,6 +61,29 @@ class ExpensesserviceApplicationTests {
     void setUp() {
         repository.deleteAll();
         when(trips.participants(anyLong(), anyString())).thenReturn(PARTICIPANTS);
+    }
+
+    @Test
+    void shortRequestDefaultsToCurrentUserTodayAndAllCurrentParticipants() throws Exception {
+        ExpenseResponse expense = create(2, new LinkedHashMap<>(Map.of(
+                "description", "Dinner", "amount", 1200, "currency", "RUB")));
+        assertThat(expense.paidBy()).isEqualTo(2);
+        assertThat(expense.spentOn()).isEqualTo(java.time.LocalDate.of(2026, 11, 2));
+        assertThat(expense.shares()).hasSize(4);
+        expense.shares().forEach(s -> assertThat(s.amount()).isEqualByComparingTo("300"));
+        ExpenseSummary summary = summary(2, true)[0];
+        assertThat(total(summary, 2).balance()).isEqualByComparingTo("900");
+    }
+
+    @Test
+    void shortRequestCanChooseSubsetOfParticipants() throws Exception {
+        ExpenseResponse expense = create(1, new LinkedHashMap<>(Map.of(
+                "description", "Tickets", "amount", 600, "currency", "USD",
+                "participantIds", List.of(2, 3))));
+        assertThat(expense.shares()).extracting(ExpenseRequest.Share::userId).containsExactly(2L, 3L);
+        assertThat(expense.paidBy()).isEqualTo(1);
+        assertDebt(summary(1, true)[0], 2, 1, "300");
+        assertDebt(summary(1, true)[0], 3, 1, "300");
     }
 
     @Test

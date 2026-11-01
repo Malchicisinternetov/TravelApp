@@ -137,7 +137,7 @@ class UserServiceTest {
 
         assertThat(result.getId()).isEqualTo(1L);
         assertThat(result.getUser()).isEqualTo(user);
-        assertThat(result.getTelegramId()).isEqualTo(456L);
+        assertThat(result.getTelegramId()).isEqualTo(123L);
         assertThat(result.getTheme()).isEqualTo("BLACK");
         assertThat(result.getLanguage()).isEqualTo("fr");
         assertThat(result.getNotificationMethod()).isEqualTo("SMS");

@@ -134,6 +134,37 @@ class TripApiTest {
     }
 
     @Test
+    void tripCanStartWithDestinationOnlyAndRouteCanBeAddedOrClearedLater() throws Exception {
+        String created = mvc.perform(post("/trips").header("Authorization", bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Holiday\",\"description\":\"Plans\",\"destinationPoint\":\"London\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.destinationPoint").value("London"))
+                .andExpect(jsonPath("$.legs.length()").value(0))
+                .andReturn().getResponse().getContentAsString();
+        long id = mapper.readTree(created).get("id").asLong();
+        mvc.perform(get("/trips/" + id).header("Authorization", bearer(1)))
+                .andExpect(jsonPath("$.destinationPoint").value("London"));
+        mvc.perform(put("/trips/" + id).header("Authorization", bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON).content(TRIP))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.legs.length()").value(2))
+                .andExpect(jsonPath("$.destinationPoint").value("London LHR"));
+        mvc.perform(put("/trips/" + id).header("Authorization", bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Holiday\",\"destinationPoint\":\"London\",\"legs\":[]}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.legs.length()").value(0));
+    }
+
+    @Test
+    void destinationIsRequiredWhenThereIsNoRoute() throws Exception {
+        for (String body : new String[]{"{\"name\":\"Holiday\"}",
+                "{\"name\":\"Holiday\",\"destinationPoint\":\" \",\"legs\":[]}"}) {
+            mvc.perform(post("/trips").header("Authorization", bearer(1))
+                            .contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    @Test
     void memberCanEditButCannotManageParticipantsOrDeleteTrip() throws Exception {
         long id = createTrip();
         addParticipant(id, 2, "MEMBER").andExpect(status().isCreated());

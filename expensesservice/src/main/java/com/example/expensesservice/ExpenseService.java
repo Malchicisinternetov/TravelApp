@@ -4,6 +4,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.*;
 import static org.springframework.http.HttpStatus.*;
 
@@ -12,10 +14,12 @@ import static org.springframework.http.HttpStatus.*;
 public class ExpenseService {
     private final ExpenseRepository repository;
     private final TripClient trips;
+    private final Clock clock;
 
-    public ExpenseService(ExpenseRepository repository, TripClient trips) {
+    public ExpenseService(ExpenseRepository repository, TripClient trips, Clock clock) {
         this.repository = repository;
         this.trips = trips;
+        this.clock = clock;
     }
 
     @Transactional
@@ -24,12 +28,14 @@ public class ExpenseService {
         requireWriter(requireParticipant(participants, actorId));
         Set<Long> memberIds = new HashSet<>();
         participants.forEach(p -> memberIds.add(p.userId()));
-        if (!memberIds.contains(request.paidBy())) {
+        Long paidBy = request.paidBy() == null ? actorId : request.paidBy();
+        if (!memberIds.contains(paidBy)) {
             throw new ExpenseException(BAD_REQUEST, "Payer must be a trip participant");
         }
         int scale = currencyScale(request.currency());
         BigDecimal amount = money(request.amount(), scale);
-        List<ExpenseShare> shares = split(request, amount, scale);
+        List<ExpenseShare> shares = split(request, amount, scale,
+                participants.stream().map(TripClient.Participant::userId).toList());
         Set<Long> seen = new HashSet<>();
         for (ExpenseShare share : shares) {
             if (!memberIds.contains(share.getUserId()) || !seen.add(share.getUserId())) {
@@ -39,10 +45,10 @@ public class ExpenseService {
 
         ExpenseEntity expense = new ExpenseEntity();
         expense.setTripId(tripId);
-        expense.setPaidBy(request.paidBy());
+        expense.setPaidBy(paidBy);
         expense.setCreatedBy(actorId);
         expense.setDescription(request.description());
-        expense.setSpentOn(request.spentOn());
+        expense.setSpentOn(request.spentOn() == null ? LocalDate.now(clock) : request.spentOn());
         expense.setCurrency(request.currency());
         expense.setAmount(amount);
         expense.getShares().addAll(shares);
@@ -84,25 +90,26 @@ public class ExpenseService {
         repository.delete(expense);
     }
 
-    private List<ExpenseShare> split(ExpenseRequest request, BigDecimal amount, int scale) {
-        if ((request.participantIds() == null) == (request.shares() == null)) {
-            throw new ExpenseException(BAD_REQUEST, "Provide either participantIds or shares");
+    private List<ExpenseShare> split(ExpenseRequest request, BigDecimal amount, int scale, List<Long> defaultIds) {
+        if (request.participantIds() != null && request.shares() != null) {
+            throw new ExpenseException(BAD_REQUEST, "Provide either participantIds or shares, not both");
         }
         List<ExpenseShare> shares = new ArrayList<>();
         if (request.shares() != null) {
             request.shares().forEach(s -> shares.add(new ExpenseShare(s.userId(), money(s.amount(), scale))));
         } else {
-            if (request.participantIds().isEmpty()) {
+            List<Long> ids = request.participantIds() == null ? defaultIds : request.participantIds();
+            if (ids.isEmpty()) {
                 throw new ExpenseException(BAD_REQUEST, "At least one participant is required");
             }
-            int count = request.participantIds().size();
+            int count = ids.size();
             BigDecimal base = amount.divide(BigDecimal.valueOf(count), scale, RoundingMode.DOWN);
             int extraUnits = amount.subtract(base.multiply(BigDecimal.valueOf(count)))
                     .movePointRight(scale).intValueExact();
             BigDecimal unit = BigDecimal.ONE.movePointLeft(scale);
             // Give the indivisible remainder to the first participants in request order.
             for (int i = 0; i < count; i++) {
-                shares.add(new ExpenseShare(request.participantIds().get(i),
+                shares.add(new ExpenseShare(ids.get(i),
                         i < extraUnits ? base.add(unit) : base));
             }
         }

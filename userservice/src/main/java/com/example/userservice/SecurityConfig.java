@@ -19,6 +19,9 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         ApiSecurity.configure(http).authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/internal/auth/telegram", "/internal/auth/telegram/link").permitAll()
+                .requestMatchers("/auth/telegram/**", "/auth/telegram").authenticated()
+                .requestMatchers(HttpMethod.POST, "/users/*/settings/telegram").denyAll()
                 .requestMatchers(HttpMethod.GET, "/users/by-telegram/{telegramId}").authenticated()
                 .requestMatchers("/users/{id}", "/users/{id}/settings", "/users/{id}/settings/**")
                 .access((authentication, context) -> new AuthorizationDecision(

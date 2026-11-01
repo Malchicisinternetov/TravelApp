@@ -120,6 +120,14 @@ public class TripService {
     private void applyDetails(TripEntity trip, TripRequest request) {
         trip.setName(request.name());
         trip.setDescription(request.description());
+        String destination = request.destinationPoint();
+        if (destination == null || destination.isBlank()) {
+            if (request.legs().isEmpty()) {
+                throw new TripException(BAD_REQUEST, "Specify a destination or a route");
+            }
+            destination = request.legs().get(request.legs().size() - 1).destinationPoint();
+        }
+        trip.setDestinationPoint(destination.trim());
         trip.getLegs().clear();
         request.legs().stream().map(TripLeg::new).forEach(trip.getLegs()::add);
     }

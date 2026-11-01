@@ -42,24 +42,20 @@ public class UserService {
         var updatedEntity = new UserSettingsEntity(
                 settingsEntity.getId(), 
                 settingsEntity.getUser(), 
-                newUserSettings.getTelegramId(), 
+                settingsEntity.getTelegramId(),
                 newUserSettings.getTheme(), 
                 newUserSettings.getLanguage(), 
                 newUserSettings.getNotificationMethod()
         );
+        updatedEntity.setTelegramVerified(settingsEntity.isTelegramVerified());
         return userSettingsRepository.save(updatedEntity);
     }
     
     public UserSettingsEntity bindTelegram(Long userId, Long telegramId) {
         UserSettingsEntity settings = getUserSettingsByUserId(userId);
-        return updateUserSettings(userId, new UserSettingsEntity(
-                null, 
-                null, 
-                telegramId, 
-                settings.getTheme(), 
-                settings.getLanguage(), 
-                settings.getNotificationMethod()
-        ));
+        settings.setTelegramId(telegramId);
+        settings.setTelegramVerified(false);
+        return userSettingsRepository.save(settings);
     }
     
     public UserEntity updateUser(Long id, UserEntity user) {

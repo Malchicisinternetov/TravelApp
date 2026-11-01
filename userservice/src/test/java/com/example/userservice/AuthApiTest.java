@@ -21,7 +21,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=sa", "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long",
-        "security.jwt.ttl-seconds=900"
+        "security.jwt.ttl-seconds=900",
+        "security.bot.secret=test-bot-service-secret-at-least-32-bytes"
 })
 @AutoConfigureMockMvc
 class AuthApiTest {
@@ -31,9 +32,11 @@ class AuthApiTest {
     @Autowired UserSettingsRepository settings;
     @Autowired PasswordEncoder passwords;
     @Autowired JwtDecoder decoder;
+    @Autowired TelegramLinkCodeRepository codes;
 
     @BeforeEach
     void clean() {
+        codes.deleteAll();
         settings.deleteAll();
         repository.deleteAll();
     }
@@ -136,7 +139,10 @@ class AuthApiTest {
                 .andExpect(status().isForbidden());
         mvc.perform(post(other + "/settings/telegram").header("Authorization", bearer(bob))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"telegramId\":123}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+        UserSettingsEntity bobSettings = settings.findByUserId(bob.userId()).orElseThrow();
+        bobSettings.setTelegramId(123L);
+        settings.saveAndFlush(bobSettings);
         mvc.perform(get("/users/by-telegram/123").header("Authorization", bearer(alice)))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/users/by-telegram/123").header("Authorization", bearer(bob)))
@@ -182,6 +188,110 @@ class AuthApiTest {
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andReturn().getResponse().getContentAsString();
         return mapper.readValue(response, AuthResponse.class);
+    }
+
+    @Test
+    void trustedBotCreatesTelegramAccountAndGetsTheSameIdentityOnNextLogin() throws Exception {
+        String body = json(Map.of("telegramId", 777, "name", "Telegram user", "create", true));
+        mvc.perform(post("/internal/auth/telegram").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/internal/auth/telegram").header("X-Bot-Secret", "wrong")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        assertThat(repository.count()).isZero();
+        AuthResponse auth = telegramLogin(777, true);
+        AuthResponse again = telegramLogin(777, false);
+        assertThat(again.userId()).isEqualTo(auth.userId());
+        assertThat(repository.count()).isEqualTo(1);
+        assertThat(decoder.decode(auth.accessToken()).getSubject()).isEqualTo(auth.userId().toString());
+        assertThat(settings.findByTelegramId(777L).orElseThrow().isTelegramVerified()).isTrue();
+    }
+
+    @Test
+    void oneTimeCodeLinksExistingAccountAndCannotBeReused() throws Exception {
+        AuthResponse website = register("Alice");
+        String code = linkCode(website);
+        assertThat(codes.findAll().get(0).getTokenHash()).isNotEqualTo(code);
+        String request = json(Map.of("telegramId", 777, "code", code));
+        mvc.perform(post("/internal/auth/telegram/link").header("X-Bot-Secret", "wrong")
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/internal/auth/telegram/link")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(website.userId()));
+        assertThat(telegramLogin(777, false).userId()).isEqualTo(website.userId());
+        mvc.perform(post("/internal/auth/telegram/link")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isBadRequest());
+        assertThat(repository.count()).isEqualTo(1);
+    }
+
+    @Test
+    void expiredCodeAndConflictingIdentityAreRejected() throws Exception {
+        AuthResponse website = register("Alice");
+        String code = linkCode(website);
+        TelegramLinkCode stored = codes.findAll().get(0);
+        stored.setExpiresAt(java.time.Instant.now().minusSeconds(1));
+        codes.saveAndFlush(stored);
+        mvc.perform(post("/internal/auth/telegram/link")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("telegramId", 777, "code", code))))
+                .andExpect(status().isBadRequest());
+        AuthResponse botAccount = telegramLogin(777, true);
+        String fresh = linkCode(website);
+        mvc.perform(post("/internal/auth/telegram/link")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(json(Map.of("telegramId", 777, "code", fresh))))
+                .andExpect(status().isConflict());
+        assertThat(telegramLogin(777, false).userId()).isEqualTo(botAccount.userId());
+    }
+
+    @Test
+    void settingsCannotForgeTelegramIdentityAndUnlinkDisablesBotLogin() throws Exception {
+        AuthResponse auth = telegramLogin(777, true);
+        mvc.perform(put("/users/" + auth.userId() + "/settings").header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"telegramId\":888,\"theme\":\"BLACK\",\"language\":\"ru\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.telegramId").value(777));
+        assertThat(settings.findByTelegramId(777L).orElseThrow().isTelegramVerified()).isTrue();
+        mvc.perform(put("/users/" + auth.userId()).header("Authorization", bearer(auth))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Updated\",\"timezone\":\"Europe/Moscow\",\"currency\":\"RUB\",\"amount\":100}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.currency").value("RUB"));
+        mvc.perform(delete("/auth/telegram").header("Authorization", bearer(auth))).andExpect(status().isNoContent());
+        mvc.perform(post("/internal/auth/telegram")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("telegramId", 777, "name", "User", "create", false))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void unverifiedLegacyBindingDoesNotAuthenticateAsItsOwner() throws Exception {
+        AuthResponse website = register("Alice");
+        UserSettingsEntity legacy = settings.findByUserId(website.userId()).orElseThrow();
+        legacy.setTelegramId(777L);
+        settings.saveAndFlush(legacy);
+        AuthResponse telegram = telegramLogin(777, true);
+        assertThat(telegram.userId()).isNotEqualTo(website.userId());
+        assertThat(settings.findByUserId(website.userId()).orElseThrow().getTelegramId()).isNull();
+    }
+
+    private AuthResponse telegramLogin(long telegramId, boolean create) throws Exception {
+        String response = mvc.perform(post("/internal/auth/telegram")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("telegramId", telegramId, "name", "Telegram user", "create", create))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return mapper.readValue(response, AuthResponse.class);
+    }
+
+    private String linkCode(AuthResponse auth) throws Exception {
+        String response = mvc.perform(post("/auth/telegram/code").header("Authorization", bearer(auth)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return mapper.readTree(response).get("code").asText();
     }
 
     private String registration(String username, String password) throws Exception {

@@ -8,8 +8,8 @@ import java.util.List;
 
 public record ExpenseRequest(
         @NotBlank @Size(max = 255) String description,
-        @NotNull LocalDate spentOn,
-        @NotNull @Positive Long paidBy,
+        LocalDate spentOn,
+        @Positive Long paidBy,
         @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 16, fraction = 3) BigDecimal amount,
         @NotNull @Pattern(regexp = "[A-Z]{3}") String currency,
         List<@NotNull @Positive Long> participantIds,
