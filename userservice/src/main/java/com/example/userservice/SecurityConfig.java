@@ -20,6 +20,7 @@ public class SecurityConfig {
         ApiSecurity.configure(http).authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/internal/auth/telegram", "/internal/auth/telegram/link").permitAll()
+                .requestMatchers(HttpMethod.POST, "/internal/notifications/telegram-recipients").permitAll()
                 .requestMatchers("/auth/telegram/**", "/auth/telegram").authenticated()
                 .requestMatchers(HttpMethod.POST, "/users/*/settings/telegram").denyAll()
                 .requestMatchers(HttpMethod.GET, "/users/by-telegram/{telegramId}").authenticated()

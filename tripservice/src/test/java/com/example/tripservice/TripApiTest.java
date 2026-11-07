@@ -26,7 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.url=jdbc:h2:mem:trips;DB_CLOSE_DELAY=-1",
         "spring.datasource.username=sa", "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
-        "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long"
+        "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long",
+        "security.notifications.secret=test-notifications-secret-at-least-32-bytes"
 })
 @AutoConfigureMockMvc
 class TripApiTest {
@@ -131,6 +132,32 @@ class TripApiTest {
                 .andExpect(jsonPath("$.legs[1].destinationPoint").value("London LHR"))
                 .andExpect(jsonPath("$.legs[1].arrivalTime").value("2026-11-01T17:00:00"))
                 .andExpect(jsonPath("$.legs[1].arrivalZone").value("Europe/London"));
+    }
+
+    @Test
+    void internalDeparturesRequireServiceSecretAndUseActualTimeZones() throws Exception {
+        long id = createTrip();
+        addParticipant(id, 2, "READ_ONLY").andExpect(status().isCreated());
+        String path = "/internal/trips/departures";
+        mvc.perform(get(path).param("from", "2026-11-01T06:00:00Z").param("to", "2026-11-01T08:00:00Z"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get(path).header("Authorization", bearer(1))
+                        .param("from", "2026-11-01T06:00:00Z").param("to", "2026-11-01T08:00:00Z"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get(path).header("X-Notification-Secret", "test-notifications-secret-at-least-32-bytes")
+                        .param("from", "2026-11-01T06:00:00Z").param("to", "2026-11-01T08:00:00Z"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].tripId").value(id))
+                .andExpect(jsonPath("$[0].departureAt").value("2026-11-01T07:00:00Z"))
+                .andExpect(jsonPath("$[0].departureZone").value("Europe/Moscow"))
+                .andExpect(jsonPath("$[0].participantIds.length()").value(2));
+        mvc.perform(get(path).header("X-Notification-Secret", "test-notifications-secret-at-least-32-bytes")
+                        .param("from", "2026-11-01T12:00:00Z").param("to", "2026-11-01T15:00:00Z"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].departurePoint").value("Istanbul IST"));
+        mvc.perform(get(path).header("X-Notification-Secret", "test-notifications-secret-at-least-32-bytes")
+                        .param("from", "2026-11-01T00:00:00Z").param("to", "2026-11-02T00:00:00Z"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

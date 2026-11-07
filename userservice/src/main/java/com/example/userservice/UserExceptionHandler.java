@@ -15,6 +15,11 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class UserExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(UserExceptionHandler.class);
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(org.springframework.web.server.ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(ex.getReason(), ex.getStatusCode().value()));
+    }
 
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ErrorResponse> handleAuth(AuthException ex) {

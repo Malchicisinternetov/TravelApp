@@ -16,6 +16,11 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class TripExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(TripExceptionHandler.class);
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleStatus(org.springframework.web.server.ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(new ErrorResponse(ex.getReason(), ex.getStatusCode().value()));
+    }
     @ExceptionHandler(TripException.class)
     public ResponseEntity<ErrorResponse> handleTrip(TripException ex) {
         return ResponseEntity.status(ex.getStatus())

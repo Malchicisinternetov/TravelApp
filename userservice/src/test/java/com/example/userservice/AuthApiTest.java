@@ -22,7 +22,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long",
         "security.jwt.ttl-seconds=900",
-        "security.bot.secret=test-bot-service-secret-at-least-32-bytes"
+        "security.bot.secret=test-bot-service-secret-at-least-32-bytes",
+        "security.notifications.secret=test-notifications-secret-at-least-32-bytes"
 })
 @AutoConfigureMockMvc
 class AuthApiTest {
@@ -188,6 +189,35 @@ class AuthApiTest {
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andReturn().getResponse().getContentAsString();
         return mapper.readValue(response, AuthResponse.class);
+    }
+
+    @Test
+    void internalRecipientsRequireSecretAndOnlyReturnVerifiedTelegramUsersWhoAllowNotifications() throws Exception {
+        AuthResponse first = telegramLogin(111, true);
+        AuthResponse second = telegramLogin(222, true);
+        AuthResponse third = register("Legacy");
+        UserSettingsEntity email = settings.findByUserId(second.userId()).orElseThrow();
+        email.setNotificationMethod("EMAIL");
+        settings.saveAndFlush(email);
+        UserSettingsEntity legacy = settings.findByUserId(third.userId()).orElseThrow();
+        legacy.setTelegramId(333L);
+        settings.saveAndFlush(legacy);
+        String body = json(Map.of("userIds", java.util.List.of(first.userId(), second.userId(), third.userId(), 99999L)));
+        mvc.perform(post("/internal/notifications/telegram-recipients").header("Authorization", bearer(first))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/internal/notifications/telegram-recipients")
+                        .header("X-Notification-Secret", "test-notifications-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].userId").value(first.userId()))
+                .andExpect(jsonPath("$[0].telegramId").value(111));
+        email.setNotificationMethod("TELEGRAM");
+        settings.saveAndFlush(email);
+        mvc.perform(post("/internal/notifications/telegram-recipients")
+                        .header("X-Notification-Secret", "test-notifications-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
     }
 
     @Test

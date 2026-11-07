@@ -13,7 +13,9 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        ApiSecurity.configure(http).authorizeHttpRequests(auth -> auth.anyRequest().authenticated());
+        ApiSecurity.configure(http).authorizeHttpRequests(auth -> auth
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/internal/trips/departures").permitAll()
+                .anyRequest().authenticated());
         return http.build();
     }
 }

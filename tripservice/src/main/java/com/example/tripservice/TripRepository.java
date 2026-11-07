@@ -8,8 +8,12 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 public interface TripRepository extends JpaRepository<TripEntity, Long> {
+    @Query("select distinct t from TripEntity t join t.legs l where l.departureTime between :from and :to")
+    List<TripEntity> findWithDeparturesBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
     @Query("select distinct t from TripEntity t join t.participants p where p.userId = :userId order by t.id")
     List<TripEntity> findAllForUser(@Param("userId") Long userId);
 
