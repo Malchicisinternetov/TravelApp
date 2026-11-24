@@ -1,8 +1,5 @@
 name: travelapp
 
-x-java-build: &java-build
-  context: .
-  dockerfile: Dockerfile
 x-java-service: &java-service
   restart: unless-stopped
   init: true
@@ -110,8 +107,8 @@ services:
   userservice:
     <<: *java-service
     build:
-      <<: *java-build
-      args: {SERVICE: userservice}
+      context: .
+      dockerfile: userservice/Dockerfile
     environment:
       <<: *api-environment
       POSTGRES_URL: jdbc:postgresql://users-db:5432/${POSTGRES_DB:-users}
@@ -134,8 +131,8 @@ services:
   tripservice:
     <<: *java-service
     build:
-      <<: *java-build
-      args: {SERVICE: tripservice}
+      context: .
+      dockerfile: tripservice/Dockerfile
     environment:
       <<: *api-environment
       TRIP_POSTGRES_URL: jdbc:postgresql://trips-db:5432/${TRIP_POSTGRES_DB:-trips}
@@ -153,8 +150,8 @@ services:
   expensesservice:
     <<: *java-service
     build:
-      <<: *java-build
-      args: {SERVICE: expensesservice}
+      context: .
+      dockerfile: expensesservice/Dockerfile
     environment:
       <<: *api-environment
       EXPENSES_POSTGRES_URL: jdbc:postgresql://expenses-db:5432/${EXPENSES_POSTGRES_DB:-expenses}
@@ -172,8 +169,8 @@ services:
   weatherservice:
     <<: *java-service
     build:
-      <<: *java-build
-      args: {SERVICE: weatherservice}
+      context: .
+      dockerfile: weatherservice/Dockerfile
     environment:
       <<: *api-environment
       WEATHER_SERVICE_PORT: '8085'
@@ -189,8 +186,8 @@ services:
   currencyservice:
     <<: *java-service
     build:
-      <<: *java-build
-      args: {SERVICE: currencyservice}
+      context: .
+      dockerfile: currencyservice/Dockerfile
     environment:
       <<: *api-environment
       CURRENCY_SERVICE_PORT: '8086'
@@ -204,8 +201,8 @@ services:
   botservice:
     <<: *java-service
     build:
-      <<: *java-build
-      args: {SERVICE: botservice}
+      context: .
+      dockerfile: botservice/Dockerfile
     environment:
       <<: *java-environment
       BOT_ENABLED: ${BOT_ENABLED:-false}
@@ -222,8 +219,8 @@ services:
   notificationservice:
     <<: *java-service
     build:
-      <<: *java-build
-      args: {SERVICE: notificationservice}
+      context: .
+      dockerfile: notificationservice/Dockerfile
     environment:
       <<: *java-environment
       NOTIFICATIONS_POSTGRES_URL: jdbc:postgresql://notifications-db:5432/${NOTIFICATIONS_POSTGRES_DB:-notifications}
