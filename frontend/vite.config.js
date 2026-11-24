@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => {
     ['users', env.USER_SERVICE_URL || 'http://localhost:8082'],
     ['trips', env.TRIP_SERVICE_URL || 'http://localhost:8083'],
     ['expenses', env.EXPENSES_SERVICE_URL || 'http://localhost:8084'],
+    ['weather', env.WEATHER_SERVICE_URL || 'http://localhost:8085'],
+    ['currency', env.CURRENCY_SERVICE_URL || 'http://localhost:8086'],
   ].map(([service, target]) => [`/api/${service}`, {
     target, changeOrigin: true, rewrite: path => path.replace(new RegExp(`^/api/${service}`), ''),
   }]))

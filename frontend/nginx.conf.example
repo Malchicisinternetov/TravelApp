@@ -9,4 +9,6 @@ server {
     location /api/users/ { proxy_pass http://userservice:8082/; }
     location /api/trips/ { proxy_pass http://tripservice:8083/; }
     location /api/expenses/ { proxy_pass http://expensesservice:8084/; }
+    location /api/weather/ { proxy_pass http://weatherservice:8085/; }
+    location /api/currency/ { proxy_pass http://currencyservice:8086/; }
 }

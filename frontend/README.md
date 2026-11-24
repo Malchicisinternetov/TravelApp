@@ -8,6 +8,8 @@ React + Vite, обычный CSS, без дополнительных UI-биб�
 
 Нужна версия Node.js, поддерживаемая установленным Vite (проверено на Node 24).
 Сначала запустите userservice, tripservice и expensesservice с PostgreSQL и общим JWT_SECRET.
+Для вкладок погоды и валют запустите также weatherservice (8085) и currencyservice (8086)
+с тем же JWT_SECRET; база данных для них не нужна.
 Для Telegram нужны также botservice и, для напоминаний, notificationservice.
 
 Из папки frontend:
@@ -26,16 +28,25 @@ npm run dev
 - USER_SERVICE_URL — http://localhost:8082
 - TRIP_SERVICE_URL — http://localhost:8083
 - EXPENSES_SERVICE_URL — http://localhost:8084
+- WEATHER_SERVICE_URL — http://localhost:8085
+- CURRENCY_SERVICE_URL — http://localhost:8086
 - VITE_TELEGRAM_BOT_USERNAME — необязательное имя вашего бота без @.
   Добавляет кнопку перехода в бота, включая start-ссылку для привязки.
   Без него команду /link можно скопировать вручную.
 
 Адреса сервисов использует Vite proxy. Браузер обращается только к /api/users,
-/api/trips и /api/expenses на текущем домене. Дополнительный CORS в Spring не нужен.
+/api/trips, /api/expenses, /api/weather и /api/currency на текущем домене. Дополнительный CORS в Spring не нужен.
 Никогда не добавляйте JWT_SECRET, BOT_SERVICE_SECRET, NOTIFICATION_SERVICE_SECRET
 или TELEGRAM_BOT_TOKEN в переменные VITE_*: они доступны браузеру.
 
 ## Что доступно
+
+- Погода: отдельная вкладка, поиск с выбором города/региона/страны, ввод координат,
+  текущие условия и прогноз на 7 дней с местным временем. Нужен запущенный weatherservice.
+- Курсы валют: отдельная вкладка, конвертер с выбором валют, обмен направлений,
+  таблица курсов с поиском и датами. Нужен запущенный currencyservice.
+  Оба сервиса используют общий JWT_SECRET; API-ключи для текущих бесплатных endpoints не нужны.
+  Условия Open-Meteo для коммерческого использования описаны в weatherservice/README.md.
 
 - Регистрация, вход, выход; понятное завершение сессии при истечении JWT или ответе 401.
 - Профиль: имя, часовой пояс с подсказками, валюта и бюджет.

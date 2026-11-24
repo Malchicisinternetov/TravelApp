@@ -20,6 +20,13 @@ export function Icon({ name = 'compass', size = 20, ...props }) {
     shield: <><path d="m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6Z"/><path d="m8 12 3 3 5-6"/></>,
     copy: <><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></>,
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"/></>,
+    cloud: <path d="M6 18a4 4 0 1 1 1-7.87A6 6 0 1 1 19 18Z"/>,
+    rain: <><path d="M6 15a4 4 0 1 1 1-7.87A6 6 0 1 1 19 15M8 18l-1 3m6-3-1 3m6-3-1 3"/></>,
+    snow: <><path d="M6 15a4 4 0 1 1 1-7.87A6 6 0 1 1 19 15M8 19v2m-1-1h2m8-1v2m-1-1h2"/></>,
+    moon: <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z"/>,
+    wind: <path d="M3 8h12a3 3 0 1 0-3-3M2 12h17a3 3 0 1 1-3 3M4 16h5a3 3 0 1 1-3 3"/>,
+    drop: <path d="M12 2S5 10 5 15a7 7 0 0 0 14 0c0-5-7-13-7-13Z"/>,
+    exchange: <path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/>,
     menu: <path d="M4 6h16M4 12h16M4 18h16"/>, chevron: <path d="m6 9 6 6 6-6"/>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>{paths[name] || paths.compass}</svg>

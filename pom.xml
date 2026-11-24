@@ -21,6 +21,8 @@
         <module>botservice</module>
         <module>notificationservice</module>
         <module>sharedlib</module>
+        <module>weatherservice</module>
+        <module>currencyservice</module>
     </modules>
     <build>
         <plugins>

@@ -7,6 +7,28 @@ import { passwordError } from '../src/password.js'
 const originalFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = originalFetch })
 const session = { accessToken: 'test-token', userId: 7, expiresAt: Date.now() + 3600000 }
+test('weather and currency tabs have independent routes', () => {
+  assert.deepEqual(routeFromHash('#/weather'), { page: 'weather' })
+  assert.deepEqual(routeFromHash('#/currency'), { page: 'currency' })
+})
+
+test('travel tools use authenticated service proxies and encode city and decimal inputs', async () => {
+  const calls = intercept()
+  const api = createApi(session)
+  await api.weatherLocations('Москва&count=100')
+  await api.weather({ latitude: -33.86, longitude: 151.21 })
+  await api.currencies()
+  await api.rates('RUB')
+  await api.convert({ from: 'RUB', to: 'USD', amount: '999999999999.123456' })
+  const city = new URL(calls[0].url, 'http://test').searchParams
+  assert.equal(city.get('city'), 'Москва&count=100')
+  assert.equal(city.get('count'), null)
+  assert.equal(calls[1].url, '/api/weather/weather?latitude=-33.86&longitude=151.21')
+  assert.equal(calls[2].url, '/api/currency/currencies')
+  assert.equal(calls[3].url, '/api/currency/currencies/rates?base=RUB')
+  assert.equal(new URL(calls[4].url, 'http://test').searchParams.get('amount'), '999999999999.123456')
+  calls.forEach(call => assert.equal(call.headers.Authorization, 'Bearer test-token'))
+})
 beforeEach(() => {
   const storage = new Map()
   globalThis.sessionStorage = { getItem: k => storage.get(k) || null, setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) }

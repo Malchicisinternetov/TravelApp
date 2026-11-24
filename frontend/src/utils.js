@@ -32,5 +32,7 @@ export function routeFromHash(hash = window.location.hash) {
   const match = hash.match(/^#\/trips\/([1-9]\d*)(?:\/(route|members|expenses|summary))?$/)
   if (match && isPositiveId(match[1])) return { page: 'trip', id: Number(match[1]), tab: match[2] || 'route' }
   if (hash === '#/settings') return { page: 'settings' }
+  if (hash === '#/weather') return { page: 'weather' }
+  if (hash === '#/currency') return { page: 'currency' }
   return { page: 'trips' }
 }
