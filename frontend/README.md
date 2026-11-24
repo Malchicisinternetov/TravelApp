@@ -8,6 +8,10 @@ React + Vite, обычный CSS, без дополнительных UI-биб�
 
 Нужна версия Node.js, поддерживаемая установленным Vite (проверено на Node 24).
 Сначала запустите userservice, tripservice и expensesservice с PostgreSQL и общим JWT_SECRET.
+Для запуска всего приложения в контейнерах используйте `docker compose --env-file ../.env up -d --build`
+из корня проекта; сайт откроется на http://localhost:8080. Настройки описаны в [INFRASTRUCTURE.md](../INFRASTRUCTURE.md).
+Для режима разработки с Java-сервисами из IDE можно поднять только Kafka и Redis:
+`docker compose --env-file ../.env up -d redis kafka`.
 Для вкладок погоды и валют запустите также weatherservice (8085) и currencyservice (8086)
 с тем же JWT_SECRET; база данных для них не нужна.
 Для Telegram нужны также botservice и, для напоминаний, notificationservice.

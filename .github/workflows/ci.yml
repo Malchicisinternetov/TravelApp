@@ -1,0 +1,84 @@
+name: Unit tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: '**/pom.xml'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Create temporary test environment
+        shell: bash
+        run: |
+          test_env="$(mktemp "$RUNNER_TEMP/travelapp-test-env.XXXXXX")"
+          cat > "$test_env" <<'EOF'
+          JWT_SECRET=ci-only-jwt-secret-at-least-32-bytes-long
+          JWT_ISSUER=travelapp
+          BOT_SERVICE_SECRET=ci-only-bot-secret-at-least-32-bytes-long
+          NOTIFICATION_SERVICE_SECRET=ci-only-notification-secret-at-least-32-bytes
+          POSTGRES_URL=jdbc:h2:mem:ci_users
+          POSTGRES_USERNAME=ci_dummy
+          POSTGRES_PASSWORD=ci_dummy
+          TRIP_POSTGRES_URL=jdbc:h2:mem:ci_trips
+          TRIP_POSTGRES_USERNAME=ci_dummy
+          TRIP_POSTGRES_PASSWORD=ci_dummy
+          EXPENSES_POSTGRES_URL=jdbc:h2:mem:ci_expenses
+          EXPENSES_POSTGRES_USERNAME=ci_dummy
+          EXPENSES_POSTGRES_PASSWORD=ci_dummy
+          NOTIFICATIONS_POSTGRES_URL=jdbc:h2:mem:ci_notifications
+          NOTIFICATIONS_POSTGRES_USERNAME=ci_dummy
+          NOTIFICATIONS_POSTGRES_PASSWORD=ci_dummy
+          REDIS_URL=redis://127.0.0.1:1
+          REDIS_ENABLED=false
+          KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:1
+          KAFKA_ENABLED=false
+          BOT_ENABLED=false
+          NOTIFICATIONS_ENABLED=false
+          TELEGRAM_BOT_NAME=ci_dummy_bot
+          TELEGRAM_BOT_TOKEN=ci_dummy_token
+          WEB_SESSION_SECURE=false
+          EOF
+          chmod 600 "$test_env"
+          echo "CI_ENV_FILE=$test_env" >> "$GITHUB_ENV"
+          cat "$test_env" >> "$GITHUB_ENV"
+
+      - name: Java unit tests (integration tag excluded)
+        run: sh ./mvnw --batch-mode --no-transfer-progress -Pci test
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend unit tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Remove temporary test environment
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${CI_ENV_FILE:-}" ]; then
+            rm -f -- "$CI_ENV_FILE"
+          fi

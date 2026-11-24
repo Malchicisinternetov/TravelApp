@@ -1,36 +1,26 @@
 package com.example.notificationservice;
 
+import com.example.sharedlib.messaging.KafkaRpcClient;
 import com.example.sharedlib.notifications.NotificationContracts.*;
-import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 public class NotificationApiClient {
-    private final RestClient trips;
-    private final RestClient users;
+    private final KafkaRpcClient rpc;
     private final String secret;
-
-    public NotificationApiClient(RestClient trips, RestClient users, String secret) {
-        this.trips = trips;
-        this.users = users;
-        this.secret = secret;
-    }
-
+    private final JsonMapper json = JsonMapper.builder().build();
+    public NotificationApiClient(KafkaRpcClient rpc, String secret) { this.rpc = rpc; this.secret = secret; }
     public List<Departure> departures(Instant from, Instant to) {
-        Departure[] response = trips.get().uri(uri -> uri.path("/internal/trips/departures")
-                        .queryParam("from", from.toString()).queryParam("to", to.toString()).build())
-                .header("X-Notification-Secret", secret).retrieve().body(Departure[].class);
-        if (response == null) throw new IllegalStateException("Empty trip service response");
-        return Arrays.asList(response);
+        var response = rpc.call("trips", "GET", "/internal/trips/departures", null, secret, Map.of("from", from, "to", to));
+        if (response == null || !response.isArray()) throw new IllegalStateException("Empty trip service response");
+        return Arrays.asList(json.treeToValue(response, Departure[].class));
     }
-
     public List<Recipient> recipients(List<Long> userIds) {
-        Recipient[] response = users.post().uri("/internal/notifications/telegram-recipients")
-                .header("X-Notification-Secret", secret).body(Map.of("userIds", userIds))
-                .retrieve().body(Recipient[].class);
-        if (response == null) throw new IllegalStateException("Empty user service response");
-        return Arrays.asList(response);
+        var response = rpc.call("users", "POST", "/internal/notifications/telegram-recipients", null, secret, Map.of("userIds", userIds));
+        if (response == null || !response.isArray()) throw new IllegalStateException("Empty user service response");
+        return Arrays.asList(json.treeToValue(response, Recipient[].class));
     }
 }

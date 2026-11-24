@@ -17,6 +17,7 @@ import static org.mockito.Mockito.*;
         "spring.datasource.username=sa", "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop", "notifications.enabled=false"
 })
+@org.junit.jupiter.api.Tag("integration")
 class NotificationServiceApplicationTests {
     private static final Instant NOW = Instant.parse("2026-11-01T07:00:00Z");
     @Autowired ReminderDeliveryService service;

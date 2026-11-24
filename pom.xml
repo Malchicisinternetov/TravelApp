@@ -12,6 +12,9 @@
     <artifactId>TravelApp</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>pom</packaging>
+    <properties>
+        <excludedTestGroups></excludedTestGroups>
+    </properties>
     <name>TravelApp</name>
     <description>TravelApp</description>
     <modules>
@@ -28,6 +31,17 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>${excludedTestGroups}</excludedGroups>
+                    <systemPropertyVariables>
+                        <travel.kafka.enabled>false</travel.kafka.enabled>
+                        <travel.redis.enabled>false</travel.redis.enabled>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <source>16</source>
@@ -36,5 +50,13 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>ci</id>
+            <properties>
+                <excludedTestGroups>integration</excludedTestGroups>
+            </properties>
+        </profile>
+    </profiles>
 
 </project>

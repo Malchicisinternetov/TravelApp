@@ -11,13 +11,10 @@ import java.time.Duration;
 @Configuration
 public class BotConfig {
     @Bean
-    public BackendClient backendClient(@Value("${bot.users-url}") String users,
-                                       @Value("${bot.trips-url}") String trips,
-                                       @Value("${bot.expenses-url}") String expenses,
+    public BackendClient backendClient(com.example.sharedlib.messaging.KafkaRpcClient rpc,
                                        @Value("${bot.service-secret}") String secret) {
-        return new BackendClient(client(users, 10), client(trips, 10), client(expenses, 15), secret);
+        return new BackendClient(rpc, secret);
     }
-
     @Bean
     public TelegramClient telegramClient(@Value("${bot.token}") String token) {
         return new TelegramClient(client("https://api.telegram.org", 35), token);

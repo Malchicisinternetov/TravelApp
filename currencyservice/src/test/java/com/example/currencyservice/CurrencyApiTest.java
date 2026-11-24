@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long")
 @AutoConfigureMockMvc
+@org.junit.jupiter.api.Tag("integration")
 class CurrencyApiTest {
     static final HttpServer provider;
     static volatile int upstreamStatus = 200;
@@ -55,15 +56,17 @@ class CurrencyApiTest {
     @AfterAll static void stop() { provider.stop(0); }
     @Autowired MockMvc mvc;
     @Autowired SecretKey jwtSigningKey;
-    @Autowired CurrencyService service;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean com.example.sharedlib.redis.RedisStore redis;
     @BeforeEach void fixtures() {
         upstreamStatus = 200; calls.set(0);
         rates = """
                 [{"date":"2026-11-23","base":"USD","quote":"JPY","rate":150.555},
                 {"date":"2026-11-24","base":"USD","quote":"KWD","rate":0.30755}]
                 """;
-        ReflectionTestUtils.setField(service, "currencies", null);
-        ((Map<?, ?>) ReflectionTestUtils.getField(service, "cache")).clear();
+
+        java.util.Map<String,Object> values = new java.util.HashMap<>();
+        org.mockito.Mockito.when(redis.cached(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(inv -> values.computeIfAbsent(inv.getArgument(0), key -> ((java.util.function.Supplier<?>) inv.getArgument(3)).get()));
     }
     String token() {
         var claims = JwtClaimsSet.builder().subject("1").issuer("travelapp").audience(List.of("travelapp-api"))

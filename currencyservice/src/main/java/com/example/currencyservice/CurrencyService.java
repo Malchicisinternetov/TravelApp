@@ -2,6 +2,7 @@ package com.example.currencyservice;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.example.sharedlib.redis.RedisStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -26,26 +27,28 @@ public class CurrencyService {
                              @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal rate, LocalDate date, Instant fetchedAt, String provider) {}
 
     private final RestClient client;
-    private List<CurrencyInfo> currencies;
-    private Instant currenciesExpireAt = Instant.MIN;
-    private final Map<String, Rates> cache = new HashMap<>();
+    private final RedisStore redis;
 
-    public CurrencyService(@Value("${currency.api-url}") String url) {
+    public CurrencyService(@Value("${currency.api-url}") String url, RedisStore redis) {
+        this.redis = redis;
         var factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(3));
         factory.setReadTimeout(Duration.ofSeconds(8));
         client = RestClient.builder().baseUrl(url).requestFactory(factory).build();
     }
 
-    public synchronized List<CurrencyInfo> currencies() {
-        if (currencies != null && Instant.now().isBefore(currenciesExpireAt)) return currencies;
+    public List<CurrencyInfo> currencies() {
+        return Arrays.asList(redis.cached("currency:catalogue", Duration.ofDays(1), CurrencyInfo[].class,
+                () -> loadCurrencies().toArray(CurrencyInfo[]::new)));
+    }
+
+    private List<CurrencyInfo> loadCurrencies() {
         var raw = client.get().uri("/v2/currencies").retrieve().body(RawCurrency[].class);
         if (raw == null || raw.length == 0) throw unavailable();
-        currencies = Arrays.stream(raw).filter(c -> c.code() != null && c.code().matches("[A-Z]{3}")
+        var currencies = Arrays.stream(raw).filter(c -> c.code() != null && c.code().matches("[A-Z]{3}")
                         && "currency".equals(c.type()) && supported(c.code()))
                 .map(c -> new CurrencyInfo(c.code(), c.name())).sorted(Comparator.comparing(CurrencyInfo::code)).toList();
         if (currencies.isEmpty()) throw unavailable();
-        currenciesExpireAt = Instant.now().plus(Duration.ofDays(1));
         return currencies;
     }
 
@@ -62,10 +65,12 @@ public class CurrencyService {
         return code;
     }
 
-    public synchronized Rates rates(String base) {
-        base = code(base);
-        Rates cached = cache.get(base);
-        if (cached != null && Instant.now().isBefore(cached.fetchedAt().plus(Duration.ofHours(1)))) return cached;
+    public Rates rates(String base) {
+        String normalized = code(base);
+        return redis.cached("currency:rates:" + normalized, Duration.ofHours(1), Rates.class, () -> loadRates(normalized));
+    }
+
+    private Rates loadRates(String base) {
         var raw = client.get().uri("/v2/rates?base={base}", base).retrieve().body(Rate[].class);
         if (raw == null || raw.length == 0) throw unavailable();
         Set<String> supported = new HashSet<>();
@@ -79,7 +84,6 @@ public class CurrencyService {
         if (result.isEmpty()) throw unavailable();
         result.sort(Comparator.comparing(Rate::quote));
         Rates response = new Rates(base, Instant.now(), "Frankfurter", List.copyOf(result));
-        cache.put(base, response);
         return response;
     }
 

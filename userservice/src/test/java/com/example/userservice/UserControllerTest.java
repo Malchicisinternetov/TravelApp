@@ -33,6 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         properties = "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long")
 @AutoConfigureMockMvc(addFilters = false)
 @Import(UserControllerTest.JacksonConfig.class)
+@org.junit.jupiter.api.Tag("integration")
 class UserControllerTest {
 
     @Autowired

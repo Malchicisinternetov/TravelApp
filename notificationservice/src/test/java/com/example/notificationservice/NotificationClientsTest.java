@@ -13,29 +13,19 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 class NotificationClientsTest {
     @Test
-    void internalApiCallsUseServiceSecretAndDeserializeUtcDeparture() {
-        RestClient.Builder builder = RestClient.builder().baseUrl("http://backend.test");
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(request -> assertThat(request.getURI().getPath()).isEqualTo("/internal/trips/departures"))
-                .andExpect(header("X-Notification-Secret", "service-secret"))
-                .andExpect(headerDoesNotExist("Authorization"))
-                .andRespond(withSuccess("""
-                        [{"tripId":10,"tripName":"Holiday","departurePoint":"Moscow","destinationPoint":"Istanbul",
-                        "departureTime":"2026-11-01T13:00:00","departureZone":"Europe/Moscow",
-                        "departureAt":"2026-11-01T10:00:00Z","participantIds":[1]}]
-                        """, MediaType.APPLICATION_JSON));
-        server.expect(requestTo("http://backend.test/internal/notifications/telegram-recipients"))
-                .andExpect(header("X-Notification-Secret", "service-secret"))
-                .andExpect(jsonPath("$.userIds[0]").value(1))
-                .andRespond(withSuccess("[{\"userId\":1,\"telegramId\":111}]", MediaType.APPLICATION_JSON));
-        RestClient client = builder.build();
-        NotificationApiClient api = new NotificationApiClient(client, client, "service-secret");
-        assertThat(api.departures(Instant.parse("2026-11-01T07:00:00Z"), Instant.parse("2026-11-01T10:00:00Z")))
-                .singleElement().satisfies(d -> assertThat(d.departureAt()).isEqualTo(Instant.parse("2026-11-01T10:00:00Z")));
+    void internalQueriesUseKafkaAndTheNotificationSecret() {
+        var rpc = org.mockito.Mockito.mock(com.example.sharedlib.messaging.KafkaRpcClient.class);
+        var json = tools.jackson.databind.json.JsonMapper.builder().build();
+        Instant from = Instant.parse("2026-11-01T07:00:00Z");
+        Instant to = Instant.parse("2026-11-01T10:00:00Z");
+        org.mockito.Mockito.when(rpc.call("trips", "GET", "/internal/trips/departures", null, "service-secret", java.util.Map.of("from", from, "to", to)))
+                .thenReturn(json.readTree("[{\"tripId\":10,\"departureAt\":\"2026-11-01T10:00:00Z\",\"participantIds\":[1]}]"));
+        org.mockito.Mockito.when(rpc.call("users", "POST", "/internal/notifications/telegram-recipients", null, "service-secret", java.util.Map.of("userIds", List.of(1L))))
+                .thenReturn(json.readTree("[{\"userId\":1,\"telegramId\":111}]"));
+        var api = new NotificationApiClient(rpc, "service-secret");
+        assertThat(api.departures(from, to)).singleElement().satisfies(d -> assertThat(d.departureAt()).isEqualTo(to));
         assertThat(api.recipients(List.of(1L))).singleElement().satisfies(r -> assertThat(r.telegramId()).isEqualTo(111));
-        server.verify();
     }
-
     @Test
     void telegramSendsPlainMessageThroughExistingBotToken() {
         RestClient.Builder builder = RestClient.builder().baseUrl("https://telegram.test");

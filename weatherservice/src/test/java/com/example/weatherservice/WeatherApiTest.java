@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest(properties = "security.jwt.secret=test-only-signing-key-at-least-32-bytes-long")
 @AutoConfigureMockMvc
+@org.junit.jupiter.api.Tag("integration")
 class WeatherApiTest {
     static final HttpServer provider;
     static volatile int upstreamStatus = 200;

@@ -1,6 +1,10 @@
 HELP.md
 target/
 bot-state/
+.env
+.env.*
+!.env.example
+!.env.infrastructure.example
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

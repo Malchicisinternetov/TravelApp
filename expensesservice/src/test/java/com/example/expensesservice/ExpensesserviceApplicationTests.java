@@ -38,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 @AutoConfigureMockMvc
 @Import(ExpensesserviceApplicationTests.FixedTime.class)
+@org.junit.jupiter.api.Tag("integration")
 class ExpensesserviceApplicationTests {
     @TestConfiguration
     static class FixedTime {

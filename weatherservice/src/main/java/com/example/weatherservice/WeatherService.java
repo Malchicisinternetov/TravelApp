@@ -1,6 +1,7 @@
 package com.example.weatherservice;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.example.sharedlib.redis.RedisStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -37,13 +38,15 @@ public class WeatherService {
     private final RestClient forecast;
     private final RestClient geocoding;
     private final String apiKey;
+    private final RedisStore redis;
 
     public WeatherService(@Value("${weather.forecast-url}") String forecastUrl,
                           @Value("${weather.geocoding-url}") String geocodingUrl,
-                          @Value("${weather.api-key:}") String apiKey) {
+                          @Value("${weather.api-key:}") String apiKey, RedisStore redis) {
         this.forecast = client(forecastUrl);
         this.geocoding = client(geocodingUrl);
         this.apiKey = apiKey;
+        this.redis = redis;
     }
 
     private static RestClient client(String url) {
@@ -60,6 +63,13 @@ public class WeatherService {
     public List<Location> locations(String city) {
         if (city == null || city.trim().length() < 2 || city.trim().length() > 150)
             throw new ResponseStatusException(BAD_REQUEST, "Введите название города: от 2 до 150 символов.");
+        String normalized = city.trim().toLowerCase(java.util.Locale.ROOT);
+        String key = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return java.util.Arrays.asList(redis.cached("weather:cities:" + key, Duration.ofDays(1), Location[].class,
+                () -> loadLocations(normalized).toArray(Location[]::new)));
+    }
+
+    private List<Location> loadLocations(String city) {
         var result = geocoding.get().uri(b -> key(b.path("/v1/search").queryParam("name", "{city}")
                 .queryParam("count", 8).queryParam("language", "ru")).build(city.trim()))
                 .retrieve().body(Locations.class);
@@ -82,6 +92,13 @@ public class WeatherService {
                 throw new ResponseStatusException(BAD_REQUEST, "Укажите широту от −90 до 90 и долготу от −180 до 180.");
             location = new Location(null, null, null, latitude, longitude);
         }
+        var selected = location;
+        var cached = redis.cached("weather:forecast:" + selected.latitude() + ":" + selected.longitude(),
+                Duration.ofMinutes(10), Weather.class, () -> loadWeather(selected));
+        return new Weather(location, cached.timezone(), cached.current(), cached.forecast(), cached.provider());
+    }
+
+    private Weather loadWeather(Location location) {
         var selected = location;
         var raw = forecast.get().uri(b -> key(b.path("/v1/forecast")
                 .queryParam("latitude", selected.latitude()).queryParam("longitude", selected.longitude())

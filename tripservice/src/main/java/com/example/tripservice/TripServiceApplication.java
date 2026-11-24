@@ -2,6 +2,7 @@ package com.example.tripservice;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+@org.springframework.context.annotation.Import(com.example.sharedlib.messaging.KafkaRpcConfiguration.class)
 @SpringBootApplication
 public class TripServiceApplication {
     public static void main(String[] args) {

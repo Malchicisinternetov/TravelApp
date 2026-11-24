@@ -23,6 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "security.jwt.ttl-seconds=60", "security.web-session.secure=true"
 })
 @AutoConfigureMockMvc
+@org.junit.jupiter.api.Tag("integration")
 class WebSessionApiTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;

@@ -1,0 +1,262 @@
+name: travelapp
+
+x-java-build: &java-build
+  context: .
+  dockerfile: Dockerfile
+x-java-service: &java-service
+  restart: unless-stopped
+  init: true
+  mem_limit: 512m
+x-java-environment: &java-environment
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70.0 -XX:InitialRAMPercentage=10.0
+  REDIS_URL: redis://redis:6379
+  REDIS_ENABLED: ${REDIS_ENABLED:-true}
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  KAFKA_ENABLED: ${KAFKA_ENABLED:-true}
+  KAFKA_TIMEOUT_SECONDS: ${KAFKA_TIMEOUT_SECONDS:-30}
+  KAFKA_AUTO_CREATE_TOPICS: ${KAFKA_AUTO_CREATE_TOPICS:-true}
+x-api-environment: &api-environment
+  <<: *java-environment
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in ../.env (32+ bytes)}
+  JWT_ISSUER: ${JWT_ISSUER:-travelapp}
+x-messaging: &messaging
+  redis: {condition: service_healthy}
+  kafka: {condition: service_healthy}
+x-postgres: &postgres
+  image: postgres:17-alpine
+  restart: unless-stopped
+  healthcheck:
+    test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+    interval: 5s
+    timeout: 3s
+    retries: 15
+    start_period: 10s
+x-http-health: &http-health
+  interval: 15s
+  timeout: 3s
+  retries: 5
+  start_period: 120s
+
+services:
+  users-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-users}
+      POSTGRES_USER: ${POSTGRES_USERNAME:?Set POSTGRES_USERNAME in ../.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in ../.env}
+    volumes: [users-db-data:/var/lib/postgresql/data]
+  trips-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: ${TRIP_POSTGRES_DB:-trips}
+      POSTGRES_USER: ${TRIP_POSTGRES_USERNAME:?Set TRIP_POSTGRES_USERNAME in ../.env}
+      POSTGRES_PASSWORD: ${TRIP_POSTGRES_PASSWORD:?Set TRIP_POSTGRES_PASSWORD in ../.env}
+    volumes: [trips-db-data:/var/lib/postgresql/data]
+  expenses-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: ${EXPENSES_POSTGRES_DB:-expenses}
+      POSTGRES_USER: ${EXPENSES_POSTGRES_USERNAME:?Set EXPENSES_POSTGRES_USERNAME in ../.env}
+      POSTGRES_PASSWORD: ${EXPENSES_POSTGRES_PASSWORD:?Set EXPENSES_POSTGRES_PASSWORD in ../.env}
+    volumes: [expenses-db-data:/var/lib/postgresql/data]
+  notifications-db:
+    <<: *postgres
+    environment:
+      POSTGRES_DB: ${NOTIFICATIONS_POSTGRES_DB:-notifications}
+      POSTGRES_USER: ${NOTIFICATIONS_POSTGRES_USERNAME:?Set NOTIFICATIONS_POSTGRES_USERNAME in ../.env}
+      POSTGRES_PASSWORD: ${NOTIFICATIONS_POSTGRES_PASSWORD:?Set NOTIFICATIONS_POSTGRES_PASSWORD in ../.env}
+    volumes: [notifications-db-data:/var/lib/postgresql/data]
+
+  redis:
+    image: redis:8.2-alpine
+    restart: unless-stopped
+    ports: ["127.0.0.1:6379:6379"]
+    command: [redis-server, --appendonly, 'yes', --appendfsync, always, --maxmemory-policy, noeviction]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  kafka:
+    image: apache/kafka:4.2.2
+    restart: unless-stopped
+    ports: ["127.0.0.1:9092:9092"]
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: HOST://:9092,DOCKER://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,DOCKER://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: HOST:PLAINTEXT,DOCKER:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_MS: 300000
+      KAFKA_LOG_SEGMENT_BYTES: 1048576
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 30000
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes: [kafka-data:/var/lib/kafka/data]
+    healthcheck:
+      test: [CMD-SHELL, '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1']
+      interval: 10s
+      timeout: 8s
+      retries: 15
+
+  userservice:
+    <<: *java-service
+    build:
+      <<: *java-build
+      args: {SERVICE: userservice}
+    environment:
+      <<: *api-environment
+      POSTGRES_URL: jdbc:postgresql://users-db:5432/${POSTGRES_DB:-users}
+      POSTGRES_USERNAME: ${POSTGRES_USERNAME:?Set POSTGRES_USERNAME in ../.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in ../.env}
+      BOT_SERVICE_SECRET: ${BOT_SERVICE_SECRET:?Set BOT_SERVICE_SECRET in ../.env (32+ bytes)}
+      NOTIFICATION_SERVICE_SECRET: ${NOTIFICATION_SERVICE_SECRET:?Set NOTIFICATION_SERVICE_SECRET in ../.env (32+ bytes)}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS:-3600}
+      WEB_SESSION_TTL_SECONDS: ${WEB_SESSION_TTL_SECONDS:-604800}
+      WEB_SESSION_SECURE: ${WEB_SESSION_SECURE:-false}
+      SPRING_JPA_SHOW_SQL: 'false'
+      SPRING_JPA_OPEN_IN_VIEW: 'false'
+    expose: ['8082']
+    depends_on:
+      <<: *messaging
+      users-db: {condition: service_healthy}
+    healthcheck:
+      <<: *http-health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8082']
+  tripservice:
+    <<: *java-service
+    build:
+      <<: *java-build
+      args: {SERVICE: tripservice}
+    environment:
+      <<: *api-environment
+      TRIP_POSTGRES_URL: jdbc:postgresql://trips-db:5432/${TRIP_POSTGRES_DB:-trips}
+      TRIP_POSTGRES_USERNAME: ${TRIP_POSTGRES_USERNAME:?Set TRIP_POSTGRES_USERNAME in ../.env}
+      TRIP_POSTGRES_PASSWORD: ${TRIP_POSTGRES_PASSWORD:?Set TRIP_POSTGRES_PASSWORD in ../.env}
+      NOTIFICATION_SERVICE_SECRET: ${NOTIFICATION_SERVICE_SECRET:?Set NOTIFICATION_SERVICE_SECRET in ../.env}
+    expose: ['8083']
+    depends_on:
+      <<: *messaging
+      trips-db: {condition: service_healthy}
+      userservice: {condition: service_healthy}
+    healthcheck:
+      <<: *http-health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8083']
+  expensesservice:
+    <<: *java-service
+    build:
+      <<: *java-build
+      args: {SERVICE: expensesservice}
+    environment:
+      <<: *api-environment
+      EXPENSES_POSTGRES_URL: jdbc:postgresql://expenses-db:5432/${EXPENSES_POSTGRES_DB:-expenses}
+      EXPENSES_POSTGRES_USERNAME: ${EXPENSES_POSTGRES_USERNAME:?Set EXPENSES_POSTGRES_USERNAME in ../.env}
+      EXPENSES_POSTGRES_PASSWORD: ${EXPENSES_POSTGRES_PASSWORD:?Set EXPENSES_POSTGRES_PASSWORD in ../.env}
+      EXPENSES_TIME_ZONE: ${EXPENSES_TIME_ZONE:-Europe/Moscow}
+    expose: ['8084']
+    depends_on:
+      <<: *messaging
+      expenses-db: {condition: service_healthy}
+      tripservice: {condition: service_healthy}
+    healthcheck:
+      <<: *http-health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8084']
+  weatherservice:
+    <<: *java-service
+    build:
+      <<: *java-build
+      args: {SERVICE: weatherservice}
+    environment:
+      <<: *api-environment
+      WEATHER_SERVICE_PORT: '8085'
+      WEATHER_FORECAST_URL: ${WEATHER_FORECAST_URL:-https://api.open-meteo.com}
+      WEATHER_GEOCODING_URL: ${WEATHER_GEOCODING_URL:-https://geocoding-api.open-meteo.com}
+      WEATHER_API_KEY: ${WEATHER_API_KEY:-}
+    expose: ['8085']
+    depends_on:
+      redis: {condition: service_healthy}
+    healthcheck:
+      <<: *http-health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8085']
+  currencyservice:
+    <<: *java-service
+    build:
+      <<: *java-build
+      args: {SERVICE: currencyservice}
+    environment:
+      <<: *api-environment
+      CURRENCY_SERVICE_PORT: '8086'
+      CURRENCY_API_URL: ${CURRENCY_API_URL:-https://api.frankfurter.dev}
+    expose: ['8086']
+    depends_on:
+      redis: {condition: service_healthy}
+    healthcheck:
+      <<: *http-health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8086']
+  botservice:
+    <<: *java-service
+    build:
+      <<: *java-build
+      args: {SERVICE: botservice}
+    environment:
+      <<: *java-environment
+      BOT_ENABLED: ${BOT_ENABLED:-false}
+      TELEGRAM_BOT_NAME: ${TELEGRAM_BOT_NAME:-travelapp_bot}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BOT_SERVICE_SECRET: ${BOT_SERVICE_SECRET:?Set BOT_SERVICE_SECRET in ../.env}
+      BOT_OFFSET_FILE: /app/bot-state/offset.txt
+    volumes: [bot-state:/app/bot-state]
+    depends_on:
+      <<: *messaging
+      userservice: {condition: service_healthy}
+      tripservice: {condition: service_healthy}
+      expensesservice: {condition: service_healthy}
+  notificationservice:
+    <<: *java-service
+    build:
+      <<: *java-build
+      args: {SERVICE: notificationservice}
+    environment:
+      <<: *java-environment
+      NOTIFICATIONS_POSTGRES_URL: jdbc:postgresql://notifications-db:5432/${NOTIFICATIONS_POSTGRES_DB:-notifications}
+      NOTIFICATIONS_POSTGRES_USERNAME: ${NOTIFICATIONS_POSTGRES_USERNAME:?Set NOTIFICATIONS_POSTGRES_USERNAME in ../.env}
+      NOTIFICATIONS_POSTGRES_PASSWORD: ${NOTIFICATIONS_POSTGRES_PASSWORD:?Set NOTIFICATIONS_POSTGRES_PASSWORD in ../.env}
+      NOTIFICATION_SERVICE_SECRET: ${NOTIFICATION_SERVICE_SECRET:?Set NOTIFICATION_SERVICE_SECRET in ../.env}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-false}
+      NOTIFICATIONS_POLL_INTERVAL_MS: ${NOTIFICATIONS_POLL_INTERVAL_MS:-60000}
+    depends_on:
+      <<: *messaging
+      notifications-db: {condition: service_healthy}
+      tripservice: {condition: service_healthy}
+      userservice: {condition: service_healthy}
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_TELEGRAM_BOT_USERNAME: ${VITE_TELEGRAM_BOT_USERNAME:-}
+    restart: unless-stopped
+    ports: ["127.0.0.1:${FRONTEND_PORT:-8080}:80"]
+    depends_on:
+      userservice: {condition: service_healthy}
+      tripservice: {condition: service_healthy}
+      expensesservice: {condition: service_healthy}
+      weatherservice: {condition: service_healthy}
+      currencyservice: {condition: service_healthy}
+
+volumes:
+  users-db-data:
+  trips-db-data:
+  expenses-db-data:
+  notifications-db-data:
+  redis-data:
+  kafka-data:
+  bot-state:

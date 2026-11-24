@@ -30,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "security.notifications.secret=test-notifications-secret-at-least-32-bytes"
 })
 @AutoConfigureMockMvc
+@org.junit.jupiter.api.Tag("integration")
 class TripApiTest {
     private static final String TRIP = """
             {

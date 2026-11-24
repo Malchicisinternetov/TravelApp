@@ -17,11 +17,10 @@ public class NotificationConfig {
     }
 
     @Bean
-    public NotificationApiClient notificationApiClient(@Value("${services.trip.url}") String trips,
-            @Value("${services.user.url}") String users, @Value("${notifications.secret}") String secret) {
-        return new NotificationApiClient(client(trips), client(users), secret);
+    public NotificationApiClient notificationApiClient(com.example.sharedlib.messaging.KafkaRpcClient rpc,
+            @Value("${notifications.secret}") String secret) {
+        return new NotificationApiClient(rpc, secret);
     }
-
     @Bean
     public TelegramSender telegramSender(@Value("${notifications.bot-token}") String token) {
         return new TelegramSender(client("https://api.telegram.org"), token);
