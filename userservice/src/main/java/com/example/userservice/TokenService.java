@@ -18,7 +18,7 @@ public class TokenService {
     private final long ttlSeconds;
 
     public TokenService(SecretKey jwtSigningKey, @Value("${security.jwt.issuer:travelapp}") String issuer,
-                        @Value("${security.jwt.ttl-seconds:900}") long ttlSeconds) {
+                        @Value("${security.jwt.ttl-seconds:3600}") long ttlSeconds) {
         if (ttlSeconds < 60 || ttlSeconds > 86400) {
             throw new IllegalArgumentException("JWT_TTL_SECONDS must be between 60 and 86400");
         }

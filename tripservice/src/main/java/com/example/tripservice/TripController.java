@@ -59,8 +59,9 @@ public class TripController {
     @PostMapping("/{tripId}/participants")
     public ResponseEntity<TripResponse> addParticipant(
             @PathVariable @Positive Long tripId, Principal principal,
-            @Valid @RequestBody AddParticipantRequest request) {
-        return ResponseEntity.status(201).body(service.addParticipant(tripId, userId(principal), request));
+            @Valid @RequestBody AddParticipantRequest request,
+            @RequestHeader("Authorization") String authorization) {
+        return ResponseEntity.status(201).body(service.addParticipant(tripId, userId(principal), request, authorization));
     }
 
     @PutMapping("/{tripId}/participants/{userId}/role")

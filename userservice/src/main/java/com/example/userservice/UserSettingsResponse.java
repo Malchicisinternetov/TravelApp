@@ -6,7 +6,8 @@ public record UserSettingsResponse(
         Long telegramId,
         String theme,
         String language,
-        String notificationMethod
+        String notificationMethod,
+        boolean telegramVerified
 ) {
     public static UserSettingsResponse from(UserSettingsEntity s) {
         return new UserSettingsResponse(
@@ -15,7 +16,8 @@ public record UserSettingsResponse(
                 s.getTelegramId(),
                 s.getTheme(),
                 s.getLanguage(),
-                s.getNotificationMethod()
+                s.getNotificationMethod(),
+                s.isTelegramVerified()
         );
     }
 }

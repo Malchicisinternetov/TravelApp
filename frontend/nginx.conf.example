@@ -1,0 +1,12 @@
+# Пример production-размещения. Замените адреса upstream и настройте HTTPS.
+server {
+    listen 80;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location / { try_files $uri $uri/ /index.html; }
+    location /api/users/ { proxy_pass http://userservice:8082/; }
+    location /api/trips/ { proxy_pass http://tripservice:8083/; }
+    location /api/expenses/ { proxy_pass http://expensesservice:8084/; }
+}

@@ -26,7 +26,7 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        validatePasswordLength(request.password());
+        PasswordPolicy.validate(request.password());
         String username = request.username().toLowerCase(Locale.ROOT);
         if (repository.existsByUsername(username)) {
             throw new AuthException(CONFLICT, "Username is already registered");

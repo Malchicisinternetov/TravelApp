@@ -15,9 +15,11 @@ import static org.springframework.http.HttpStatus.*;
 @Transactional(readOnly = true)
 public class TripService {
     private final TripRepository repository;
+    private final UserDirectoryClient users;
 
-    public TripService(TripRepository repository) {
+    public TripService(TripRepository repository, UserDirectoryClient users) {
         this.repository = repository;
+        this.users = users;
     }
 
     @Transactional
@@ -58,12 +60,13 @@ public class TripService {
     }
 
     @Transactional
-    public TripResponse addParticipant(Long tripId, Long actorId, AddParticipantRequest request) {
+    public TripResponse addParticipant(Long tripId, Long actorId, AddParticipantRequest request, String authorization) {
         TripEntity trip = find(tripId, true);
         requireOwner(trip, actorId);
         if (trip.getParticipants().stream().anyMatch(p -> p.getUserId().equals(request.userId()))) {
             throw new TripException(CONFLICT, "User is already a trip participant");
         }
+        users.requireExists(request.userId(), authorization);
         trip.getParticipants().add(new TripParticipant(request.userId(), request.role()));
         return TripResponse.from(trip);
     }

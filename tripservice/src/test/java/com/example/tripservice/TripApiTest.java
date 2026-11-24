@@ -53,6 +53,20 @@ class TripApiTest {
     @Autowired ObjectMapper mapper;
     @Autowired TripRepository repository;
     @Autowired SecretKey jwtSigningKey;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean UserDirectoryClient users;
+
+    @Test
+    void addingParticipantChecksUserServiceAndRejectsMissingUsers() throws Exception {
+        long id = createTrip();
+        org.mockito.Mockito.doThrow(new TripException(org.springframework.http.HttpStatus.NOT_FOUND, "User not found"))
+                .when(users).requireExists(org.mockito.ArgumentMatchers.eq(999999L), org.mockito.ArgumentMatchers.anyString());
+        mvc.perform(post("/trips/" + id + "/participants").header("Authorization", bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"userId\":999999,\"role\":\"MEMBER\"}"))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/trips/" + id).header("Authorization", bearer(1)))
+                .andExpect(jsonPath("$.participants.length()").value(1));
+        org.mockito.Mockito.verify(users).requireExists(org.mockito.ArgumentMatchers.eq(999999L), org.mockito.ArgumentMatchers.anyString());
+    }
 
     private String bearer(long userId) {
         return bearerToken(jwtSigningKey, Long.toString(userId), "travelapp", "travelapp-api",

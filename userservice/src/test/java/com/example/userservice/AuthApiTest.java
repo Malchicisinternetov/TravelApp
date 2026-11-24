@@ -47,8 +47,8 @@ class AuthApiTest {
         AuthResponse auth = register("Alice");
         UserEntity stored = repository.findByUsername("alice").orElseThrow();
         assertThat(stored.getId()).isEqualTo(auth.userId());
-        assertThat(stored.getPasswordHash()).isNotEqualTo("secret-password");
-        assertThat(passwords.matches("secret-password", stored.getPasswordHash())).isTrue();
+        assertThat(stored.getPasswordHash()).isNotEqualTo("Compass!Trip42");
+        assertThat(passwords.matches("Compass!Trip42", stored.getPasswordHash())).isTrue();
         assertThat(settings.findByUserId(stored.getId())).isPresent();
         var jwt = decoder.decode(auth.accessToken());
         assertThat(jwt.getSubject()).isEqualTo(stored.getId().toString());
@@ -62,14 +62,15 @@ class AuthApiTest {
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(header().doesNotExist("Set-Cookie"));
         mvc.perform(get("/users/" + auth.userId() + "/settings").header("Authorization", bearer(auth)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(auth.userId()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(auth.userId()))
+                .andExpect(jsonPath("$.telegramVerified").value(false));
     }
 
     @Test
     void loginIsCaseInsensitiveAndWrongCredentialsUseSameError() throws Exception {
         AuthResponse auth = register("Alice");
         String json = mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("username", "ALICE", "password", "secret-password"))))
+                        .content(json(Map.of("username", "ALICE", "password", "Compass!Trip42"))))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andExpect(jsonPath("$.userId").value(auth.userId()))
@@ -88,7 +89,7 @@ class AuthApiTest {
     void duplicateRegistrationDoesNotCreateAnotherUserOrSettings() throws Exception {
         register("Alice");
         mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content(registration("ALICE", "secret-password")))
+                        .content(registration("ALICE", "Compass!Trip42")))
                 .andExpect(status().isConflict());
         assertThat(repository.count()).isEqualTo(1);
         assertThat(settings.count()).isEqualTo(1);
@@ -97,9 +98,9 @@ class AuthApiTest {
     @Test
     void invalidRegistrationAndMalformedLoginAreBadRequests() throws Exception {
         for (String body : new String[]{
-                "{}", "{invalid-json", registration("a", "secret-password"),
+                "{}", "{invalid-json", registration("a", "Compass!Trip42"),
                 registration("valid-user", "short"), registration("valid-user", "я".repeat(40)),
-                registration("bad username", "secret-password")
+                registration("bad username", "Compass!Trip42")
         }) {
             mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest()).andExpect(jsonPath("$.status").value(400));
@@ -166,7 +167,7 @@ class AuthApiTest {
         assertThat(user.getPasswordHash()).isEqualTo(hash);
         assertThat(repository.existsByUsername("hijacked")).isFalse();
         mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("username", "alice", "password", "secret-password"))))
+                        .content(json(Map.of("username", "alice", "password", "Compass!Trip42"))))
                 .andExpect(status().isOk());
     }
 
@@ -178,13 +179,13 @@ class AuthApiTest {
         assertThat(repository.count()).isZero();
         assertThat(settings.count()).isZero();
         mvc.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("username", "alice", "password", "secret-password"))))
+                        .content(json(Map.of("username", "alice", "password", "Compass!Trip42"))))
                 .andExpect(status().isUnauthorized());
     }
 
     private AuthResponse register(String username) throws Exception {
         String response = mvc.perform(post("/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content(registration(username, "secret-password")))
+                        .content(registration(username, "Compass!Trip42")))
                 .andExpect(status().isCreated()).andExpect(header().exists("Location"))
                 .andExpect(header().string("Cache-Control", "no-store"))
                 .andReturn().getResponse().getContentAsString();
@@ -284,13 +285,16 @@ class AuthApiTest {
         mvc.perform(put("/users/" + auth.userId() + "/settings").header("Authorization", bearer(auth))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"telegramId\":888,\"theme\":\"BLACK\",\"language\":\"ru\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.telegramId").value(777));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.telegramId").value(777))
+                .andExpect(jsonPath("$.telegramVerified").value(true));
         assertThat(settings.findByTelegramId(777L).orElseThrow().isTelegramVerified()).isTrue();
         mvc.perform(put("/users/" + auth.userId()).header("Authorization", bearer(auth))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Updated\",\"timezone\":\"Europe/Moscow\",\"currency\":\"RUB\",\"amount\":100}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.currency").value("RUB"));
         mvc.perform(delete("/auth/telegram").header("Authorization", bearer(auth))).andExpect(status().isNoContent());
+        mvc.perform(get("/users/" + auth.userId() + "/settings").header("Authorization", bearer(auth)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.telegramVerified").value(false));
         mvc.perform(post("/internal/auth/telegram")
                         .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
                         .contentType(MediaType.APPLICATION_JSON)

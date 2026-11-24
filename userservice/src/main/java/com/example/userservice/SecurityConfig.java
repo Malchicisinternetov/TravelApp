@@ -18,7 +18,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         ApiSecurity.configure(http).authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout").permitAll()
+                .requestMatchers(HttpMethod.POST, "/users/directory").authenticated()
                 .requestMatchers(HttpMethod.POST, "/internal/auth/telegram", "/internal/auth/telegram/link").permitAll()
                 .requestMatchers(HttpMethod.POST, "/internal/notifications/telegram-recipients").permitAll()
                 .requestMatchers("/auth/telegram/**", "/auth/telegram").authenticated()
