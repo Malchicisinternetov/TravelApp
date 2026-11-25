@@ -75,7 +75,10 @@ def test_scheduled_notifications_only_reach_verified_opted_in_current_members_on
     label = uuid.uuid4().hex[:10]
     route = {"name": label, "legs": [flight(1, label), flight(5, label + "-later")]}
     api("trips", "PUT", path, owner, json=route)
-    matching = lambda chat: [m for m in messages(chat) if "Скоро ваш вылет" in m["text"] and label in m["text"]]
+    def matching(chat, departure_label=label):
+        prefix = f"Скоро ваш вылет из Origin {departure_label} в Destination {departure_label},"
+        return [m for m in messages(chat) if m["text"].startswith(prefix)]
+
     for name in ["owner", "member"]:
         eventually(lambda: matching(chats[name]), timeout=45)
     # Observe several scheduled polling cycles to detect duplicates.
@@ -83,7 +86,7 @@ def test_scheduled_notifications_only_reach_verified_opted_in_current_members_on
     assert all(len(matching(chats[name])) == 1 for name in ["owner", "member"])
     assert not matching(chats["outsider"])
     assert "Origin " + label in matching(chats["owner"])[0]["text"]
-    assert "-later" not in matching(chats["owner"])[0]["text"]
+    assert not matching(chats["owner"], label + "-later")
     # A changed departure is a new reminder; removed/disabled users must not receive it.
     api("trips", "DELETE", path + f"/participants/{member['userId']}", owner, expected=204)
     api("users", "PUT", f"/users/{owner['userId']}/settings", owner, json={"notificationMethod": "NONE"})
@@ -91,7 +94,11 @@ def test_scheduled_notifications_only_reach_verified_opted_in_current_members_on
     link(reader, chats["reader"], rpc)
     api("users", "PUT", f"/users/{reader['userId']}/settings", reader,
         json={"notificationMethod": "TELEGRAM"})
-    route["legs"] = [flight(2, label + "-changed")]
+    # The newly linked reader can legitimately receive the original reminder.
+    # Force that ordering to reproduce the CI race before changing the departure.
+    eventually(lambda: matching(chats["reader"]), timeout=45)
+    changed_label = label + "-changed"
+    route["legs"] = [flight(2, changed_label)]
     api("trips", "PUT", path, owner, json=route)
     # Poll the real notification recipient endpoint as well as observing scheduler output.
     recipients = rpc.call("users", "POST", "/internal/notifications/telegram-recipients",
@@ -99,7 +106,9 @@ def test_scheduled_notifications_only_reach_verified_opted_in_current_members_on
                           secret=NOTIFICATION_SECRET)
     assert {r["userId"] for r in recipients} == {member["userId"], reader["userId"]}
     # A positive control proves the scheduler is still processing the changed route.
-    eventually(lambda: matching(chats["reader"]), timeout=45)
-    assert "-changed" in matching(chats["reader"])[0]["text"]
+    eventually(lambda: matching(chats["reader"], changed_label), timeout=45)
     time.sleep(4)
     assert all(len(matching(chats[name])) == 1 for name in ["owner", "member"])
+    assert len(matching(chats["reader"])) == 1
+    assert len(matching(chats["reader"], changed_label)) == 1
+    assert all(not matching(chats[name], changed_label) for name in ["owner", "member", "outsider"])
