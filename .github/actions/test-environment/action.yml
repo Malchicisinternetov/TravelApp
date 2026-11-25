@@ -1,0 +1,40 @@
+name: Temporary test environment
+description: Export disposable dummy values without reading production secrets
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        test_env="$(mktemp "$RUNNER_TEMP/travelapp-test-env.XXXXXX")"
+        cat tests/.env.example > "$test_env"
+        cat >> "$test_env" <<'EOF'
+        JWT_SECRET=ci-only-jwt-secret-at-least-32-bytes-long
+        JWT_ISSUER=travelapp
+        BOT_SERVICE_SECRET=ci-only-bot-secret-at-least-32-bytes-long
+        NOTIFICATION_SERVICE_SECRET=ci-only-notification-secret-at-least-32-bytes
+        POSTGRES_URL=jdbc:h2:mem:ci_users
+        POSTGRES_USERNAME=ci_dummy
+        POSTGRES_PASSWORD=ci_dummy
+        TRIP_POSTGRES_URL=jdbc:h2:mem:ci_trips
+        TRIP_POSTGRES_USERNAME=ci_dummy
+        TRIP_POSTGRES_PASSWORD=ci_dummy
+        EXPENSES_POSTGRES_URL=jdbc:h2:mem:ci_expenses
+        EXPENSES_POSTGRES_USERNAME=ci_dummy
+        EXPENSES_POSTGRES_PASSWORD=ci_dummy
+        NOTIFICATIONS_POSTGRES_URL=jdbc:h2:mem:ci_notifications
+        NOTIFICATIONS_POSTGRES_USERNAME=ci_dummy
+        NOTIFICATIONS_POSTGRES_PASSWORD=ci_dummy
+        REDIS_URL=redis://127.0.0.1:1
+        REDIS_ENABLED=false
+        KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:1
+        KAFKA_ENABLED=false
+        BOT_ENABLED=false
+        NOTIFICATIONS_ENABLED=false
+        TELEGRAM_BOT_NAME=ci_dummy_bot
+        TELEGRAM_BOT_TOKEN=ci_dummy_token
+        WEB_SESSION_SECURE=false
+        EOF
+        chmod 600 "$test_env"
+        echo "CI_ENV_FILE=$test_env" >> "$GITHUB_ENV"
+        # GitHub environment files contain assignments, not .env comments.
+        sed '/^#/d; /^$/d' "$test_env" >> "$GITHUB_ENV"
