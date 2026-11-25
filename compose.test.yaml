@@ -1,0 +1,194 @@
+# Standalone test stack. No production .env, host ports or production volumes.
+name: travelapp-tests
+
+x-runtime: &runtime
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70.0
+  JWT_SECRET: ${TEST_JWT_SECRET:-integration-only-jwt-secret-at-least-32-bytes}
+  JWT_ISSUER: travelapp
+  BOT_SERVICE_SECRET: ${TEST_BOT_SECRET:-integration-only-bot-secret-at-least-32-bytes}
+  NOTIFICATION_SERVICE_SECRET: ${TEST_NOTIFICATION_SECRET:-integration-only-notification-secret-32-bytes}
+  REDIS_URL: redis://redis:6379
+  REDIS_ENABLED: 'true'
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  KAFKA_ENABLED: 'true'
+  KAFKA_AUTO_CREATE_TOPICS: 'true'
+  KAFKA_TIMEOUT_SECONDS: '20'
+  TELEGRAM_BOT_NAME: integration_bot
+  TELEGRAM_BOT_TOKEN: integration_dummy_token
+  TELEGRAM_API_URL: http://external:8090
+  SPRING_JPA_SHOW_SQL: 'false'
+  SPRING_JPA_OPEN_IN_VIEW: 'false'
+  LOGGING_LEVEL_ROOT: WARN
+x-java: &java
+  init: true
+  mem_limit: 448m
+x-dependencies: &dependencies
+  postgres: {condition: service_healthy}
+  redis: {condition: service_healthy}
+  kafka: {condition: service_healthy}
+  external: {condition: service_healthy}
+x-health: &health
+  interval: 3s
+  timeout: 2s
+  start_period: 120s
+  retries: 40
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: integration
+      POSTGRES_PASSWORD: integration_dummy_password
+    tmpfs: [/var/lib/postgresql/data]
+    volumes: [./tests/init.sql:/docker-entrypoint-initdb.d/01-databases.sql:ro]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -h 127.0.0.1 -U integration -d notifications']
+      interval: 3s
+      timeout: 2s
+      retries: 30
+  redis:
+    image: redis:8.2-alpine
+    command: [redis-server, --save, '', --appendonly, 'no', --maxmemory-policy, noeviction]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+  kafka:
+    image: apache/kafka:4.2.2
+    mem_limit: 768m
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: DOCKER://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: DOCKER://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: DOCKER:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: DOCKER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx384m
+    healthcheck:
+      test: [CMD-SHELL, '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:29092 > /dev/null 2>&1']
+      interval: 5s
+      timeout: 8s
+      retries: 40
+  external:
+    build: {context: ., dockerfile: tests/Dockerfile}
+    command: [python, fake_external.py]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  userservice:
+    <<: *java
+    build: {context: ., dockerfile: userservice/Dockerfile}
+    environment:
+      <<: *runtime
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/users
+      POSTGRES_USERNAME: integration
+      POSTGRES_PASSWORD: integration_dummy_password
+      WEB_SESSION_SECURE: 'false'
+    depends_on:
+      <<: *dependencies
+    healthcheck:
+      <<: *health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8082']
+  tripservice:
+    <<: *java
+    build: {context: ., dockerfile: tripservice/Dockerfile}
+    environment:
+      <<: *runtime
+      TRIP_POSTGRES_URL: jdbc:postgresql://postgres:5432/trips
+      TRIP_POSTGRES_USERNAME: integration
+      TRIP_POSTGRES_PASSWORD: integration_dummy_password
+    depends_on:
+      <<: *dependencies
+      userservice: {condition: service_healthy}
+    healthcheck:
+      <<: *health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8083']
+  expensesservice:
+    <<: *java
+    build: {context: ., dockerfile: expensesservice/Dockerfile}
+    environment:
+      <<: *runtime
+      EXPENSES_POSTGRES_URL: jdbc:postgresql://postgres:5432/expenses
+      EXPENSES_POSTGRES_USERNAME: integration
+      EXPENSES_POSTGRES_PASSWORD: integration_dummy_password
+    depends_on:
+      <<: *dependencies
+      tripservice: {condition: service_healthy}
+    healthcheck:
+      <<: *health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8084']
+  weatherservice:
+    <<: *java
+    build: {context: ., dockerfile: weatherservice/Dockerfile}
+    environment:
+      <<: *runtime
+      WEATHER_FORECAST_URL: http://external:8090
+      WEATHER_GEOCODING_URL: http://external:8090
+    depends_on:
+      <<: *dependencies
+    healthcheck:
+      <<: *health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8085']
+  currencyservice:
+    <<: *java
+    build: {context: ., dockerfile: currencyservice/Dockerfile}
+    environment:
+      <<: *runtime
+      CURRENCY_API_URL: http://external:8090
+    depends_on:
+      <<: *dependencies
+    healthcheck:
+      <<: *health
+      test: [CMD, bash, -ec, 'true > /dev/tcp/127.0.0.1/8086']
+  botservice:
+    <<: *java
+    build: {context: ., dockerfile: botservice/Dockerfile}
+    environment:
+      <<: *runtime
+      BOT_ENABLED: 'true'
+      BOT_OFFSET_FILE: /app/bot-state/offset.txt
+    depends_on:
+      <<: *dependencies
+      userservice: {condition: service_healthy}
+      tripservice: {condition: service_healthy}
+      expensesservice: {condition: service_healthy}
+  notificationservice:
+    <<: *java
+    build: {context: ., dockerfile: notificationservice/Dockerfile}
+    environment:
+      <<: *runtime
+      NOTIFICATIONS_POSTGRES_URL: jdbc:postgresql://postgres:5432/notifications
+      NOTIFICATIONS_POSTGRES_USERNAME: integration
+      NOTIFICATIONS_POSTGRES_PASSWORD: integration_dummy_password
+      NOTIFICATIONS_ENABLED: 'true'
+      NOTIFICATIONS_POLL_INTERVAL_MS: '1000'
+    depends_on:
+      <<: *dependencies
+      userservice: {condition: service_healthy}
+      tripservice: {condition: service_healthy}
+      expensesservice: {condition: service_healthy}
+  tests:
+    build: {context: ., dockerfile: tests/Dockerfile}
+    environment:
+      TEST_JWT_SECRET: ${TEST_JWT_SECRET:-integration-only-jwt-secret-at-least-32-bytes}
+      TEST_BOT_SECRET: ${TEST_BOT_SECRET:-integration-only-bot-secret-at-least-32-bytes}
+      TEST_NOTIFICATION_SECRET: ${TEST_NOTIFICATION_SECRET:-integration-only-notification-secret-32-bytes}
+    volumes: [./tests/reports:/reports]
+    depends_on:
+      userservice: {condition: service_healthy}
+      tripservice: {condition: service_healthy}
+      expensesservice: {condition: service_healthy}
+      weatherservice: {condition: service_healthy}
+      currencyservice: {condition: service_healthy}
+      botservice: {condition: service_started}
+      notificationservice: {condition: service_started}

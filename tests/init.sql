@@ -1,0 +1,4 @@
+CREATE DATABASE users;
+CREATE DATABASE trips;
+CREATE DATABASE expenses;
+CREATE DATABASE notifications;

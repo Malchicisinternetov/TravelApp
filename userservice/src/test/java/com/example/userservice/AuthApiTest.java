@@ -314,6 +314,26 @@ class AuthApiTest {
         assertThat(settings.findByUserId(website.userId()).orElseThrow().getTelegramId()).isNull();
     }
 
+    @Test
+    void failedLinkConflictRollsBackAndDoesNotConsumeCode() throws Exception {
+        AuthResponse website = register("Alice");
+        telegramLogin(777, true);
+        String code = linkCode(website);
+        String request = json(Map.of("telegramId", 777, "code", code));
+        mvc.perform(post("/internal/auth/telegram/link")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isConflict());
+        assertThat(codes.count()).isEqualTo(1);
+        assertThat(settings.findByUserId(website.userId()).orElseThrow().isTelegramVerified()).isFalse();
+        request = json(Map.of("telegramId", 888, "code", code));
+        mvc.perform(post("/internal/auth/telegram/link")
+                        .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(website.userId()));
+        assertThat(codes.count()).isZero();
+    }
+
     private AuthResponse telegramLogin(long telegramId, boolean create) throws Exception {
         String response = mvc.perform(post("/internal/auth/telegram")
                         .header("X-Bot-Secret", "test-bot-service-secret-at-least-32-bytes")

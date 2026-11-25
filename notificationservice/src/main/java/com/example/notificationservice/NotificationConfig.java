@@ -22,8 +22,9 @@ public class NotificationConfig {
         return new NotificationApiClient(rpc, secret);
     }
     @Bean
-    public TelegramSender telegramSender(@Value("${notifications.bot-token}") String token) {
-        return new TelegramSender(client("https://api.telegram.org"), token);
+    public TelegramSender telegramSender(@Value("${notifications.bot-token}") String token,
+            @Value("${notifications.telegram-api-url:https://api.telegram.org}") String apiUrl) {
+        return new TelegramSender(client(apiUrl), token);
     }
 
     private RestClient client(String url) {

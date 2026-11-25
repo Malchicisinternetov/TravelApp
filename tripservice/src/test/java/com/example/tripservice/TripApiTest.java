@@ -347,6 +347,45 @@ class TripApiTest {
         mvc.perform(get("/trips/" + id).header("Authorization", bearer(1))).andExpect(status().isNotFound());
     }
 
+    @Test
+    void failedUpdateRollsBackDetailsAlreadyChangedInsideTransaction() throws Exception {
+        long id = createTrip();
+        String before = mvc.perform(get("/trips/" + id).header("Authorization", bearer(1)))
+                .andReturn().getResponse().getContentAsString();
+        mvc.perform(put("/trips/" + id).header("Authorization", bearer(1))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Must roll back\",\"description\":\"Changed\",\"legs\":[]}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/trips/" + id).header("Authorization", bearer(1)))
+                .andExpect(content().json(before));
+    }
+
+    @Test
+    void concurrentOwnersCannotBothDemoteThemselves() throws Exception {
+        long id = createTrip();
+        addParticipant(id, 2, "OWNER").andExpect(status().isCreated());
+        var workers = java.util.concurrent.Executors.newFixedThreadPool(2);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        try {
+            var results = new java.util.ArrayList<java.util.concurrent.Future<Integer>>();
+            for (long actor : new long[]{1, 2}) {
+                results.add(workers.submit(() -> {
+                    start.await();
+                    return changeRole(id, actor, actor, "MEMBER").andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            var statuses = new java.util.ArrayList<Integer>();
+            for (var result : results) statuses.add(result.get(10, java.util.concurrent.TimeUnit.SECONDS));
+            org.assertj.core.api.Assertions.assertThat(statuses).containsExactlyInAnyOrder(200, 409);
+            long remainingOwner = statuses.get(0) == 409 ? 1 : 2;
+            mvc.perform(get("/trips/" + id + "/participants").header("Authorization", bearer(remainingOwner)))
+                    .andExpect(jsonPath("$[?(@.role == 'OWNER')]", org.hamcrest.Matchers.hasSize(1)));
+        } finally {
+            workers.shutdownNow();
+        }
+    }
+
     private long createTrip() throws Exception {
         String json = mvc.perform(post("/trips").header("Authorization", bearer(1))
                         .contentType(MediaType.APPLICATION_JSON).content(TRIP))

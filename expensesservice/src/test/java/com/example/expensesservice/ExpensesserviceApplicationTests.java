@@ -311,6 +311,29 @@ class ExpensesserviceApplicationTests {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
+    @Test
+    void dependencyFailureDoesNotSaveExpenseOrDestroyExistingHistory() throws Exception {
+        create(1, equal("40", "USD", 1, 1L, 2L));
+        when(trips.participants(anyLong(), anyString()))
+                .thenThrow(new ExpenseException(SERVICE_UNAVAILABLE, "Trip service unavailable"));
+        postExpense(1, equal("80", "USD", 1, 1L, 2L)).andExpect(status().isServiceUnavailable());
+        assertThat(repository.count()).isEqualTo(1);
+        doReturn(PARTICIPANTS).when(trips).participants(anyLong(), anyString());
+        mvc.perform(get(BASE).header("Authorization", bearer(1)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        assertBalanced(summary(1, false)[0]);
+    }
+
+    @Test
+    void removedParticipantsHistoricSharesRemainInAccountingButAccessIsRevoked() throws Exception {
+        create(1, equal("100", "USD", 1, 1L, 2L));
+        when(trips.participants(anyLong(), anyString())).thenReturn(List.of(PARTICIPANTS.get(0)));
+        mvc.perform(get(BASE).header("Authorization", bearer(2))).andExpect(status().isForbidden());
+        ExpenseSummary persisted = summary(1, false)[0];
+        assertDebt(persisted, 2, 1, "50");
+        assertBalanced(persisted);
+    }
+
     private String bearer(long userId) {
         JwtClaimsSet claims = JwtClaimsSet.builder().subject(Long.toString(userId)).issuer("travelapp")
                 .audience(List.of("travelapp-api")).issuedAt(Instant.now())

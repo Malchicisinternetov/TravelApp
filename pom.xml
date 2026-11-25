@@ -14,6 +14,7 @@
     <packaging>pom</packaging>
     <properties>
         <excludedTestGroups></excludedTestGroups>
+        <includedTestGroups></includedTestGroups>
     </properties>
     <name>TravelApp</name>
     <description>TravelApp</description>
@@ -33,6 +34,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <groups>${includedTestGroups}</groups>
                     <excludedGroups>${excludedTestGroups}</excludedGroups>
                     <systemPropertyVariables>
                         <travel.kafka.enabled>false</travel.kafka.enabled>
@@ -51,6 +53,12 @@
         </plugins>
     </build>
     <profiles>
+        <profile>
+            <id>service-integration</id>
+            <properties>
+                <includedTestGroups>integration</includedTestGroups>
+            </properties>
+        </profile>
         <profile>
             <id>ci</id>
             <properties>

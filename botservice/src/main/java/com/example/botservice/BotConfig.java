@@ -16,8 +16,9 @@ public class BotConfig {
         return new BackendClient(rpc, secret);
     }
     @Bean
-    public TelegramClient telegramClient(@Value("${bot.token}") String token) {
-        return new TelegramClient(client("https://api.telegram.org", 35), token);
+    public TelegramClient telegramClient(@Value("${bot.token}") String token,
+            @Value("${bot.api-url:https://api.telegram.org}") String apiUrl) {
+        return new TelegramClient(client(apiUrl, 35), token);
     }
 
     private RestClient client(String url, int readSeconds) {

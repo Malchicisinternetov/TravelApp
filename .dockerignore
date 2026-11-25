@@ -10,3 +10,6 @@
 **/*.log
 bot-state
 **/.mvn
+**/__pycache__
+**/.pytest_cache
+tests/reports

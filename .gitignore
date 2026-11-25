@@ -36,3 +36,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Python integration tests
+__pycache__/
+.pytest_cache/
+.venv/
+tests/reports/
